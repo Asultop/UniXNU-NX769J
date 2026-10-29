@@ -89,13 +89,26 @@ and reproduces them.
 | `kernel.prelink.early_security_init` | `…=0xfffffff004e2b640` | **filled** from `__PRELINK_INFO` |
 | `kernel.prelink.roots` | 30 bundle identifiers | **filled**, each verified present |
 | `payload.trust_cache_sha256` | the two IPSW trust caches | **filled** |
+| `adt.product.bytes.product-id` | `fd079b298144a7deb4d7c87fef3eb474d8f0e7eb` | **filled** from the real D22AP device tree |
 | `ipsw.url` | member name | restore images are not redistributable; pass `--ipsw` or `UNIXNU_IPSW` |
 | `payload.text_fixups` | — | **open** — from the dyld shared cache inside the OS image |
-| `adt.product.bytes.product-id` | — | **open** — from `libMobileGestalt` inside the OS image |
 
-The two open fields live inside `096-04088-077.dmg`, not in the IPSW container,
-so they need that image mounted or extracted. `text_fixups` keeps a placeholder
-so the payload step fails loudly rather than silently dropping the fixups.
+The `/product` values come from `Firmware/all_flash/DeviceTree.d22ap.im4p` in the
+restore image, which is the real board device tree — the same source the
+community iOS 16 ports use. Three of them correct what would otherwise be
+copied from the iPadOS profile:
+
+| Property | This profile | Would have been |
+| --- | --- | --- |
+| `artwork-device-subtype` | `2436` (iPhone X panel height) | `2732` (the iPad's) |
+| `compatible-device-fallback` | `iPhone9,2` | `iPhone10,6` |
+| `kern.maxvnodes` | `10000` | `66560` |
+
+`payload.text_fixups` is the one field still open. It lives in the dyld shared
+cache inside `096-04088-077.dmg`, not in the IPSW container, and it keeps a
+placeholder so the payload step fails loudly rather than silently dropping the
+fixups. The fixups only matter once
+`patches/xnu/native-text-fixup.patch` is rebased onto `xnu-8796`.
 
 ### The patch rebase
 

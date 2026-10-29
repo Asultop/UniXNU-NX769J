@@ -155,31 +155,56 @@
 
 ["adt"."product"]
 
+# The /product properties below are the real D22AP values, read from
+# Firmware/all_flash/DeviceTree.d22ap.im4p in the IPSW. The community iOS 16
+# ports take them the same way. Two of them correct values that would otherwise
+# be guessed from the iPadOS profile: artwork-device-subtype is 2436, the iPhone
+# X panel height, not the iPad's 2732; and kern.maxvnodes is 10000, not the
+# iPadOS 66560.
 ["adt"."product"."string"]
 "product-name" = "iPhone X"
 "product-description" = "iPhone X"
-# A phone, not a pad: the iPadOS profile sets artwork-device-idiom to pad and
-# that drives the layout of every userland surface.
 "artwork-device-idiom" = "phone"
 "artwork-display-gamut" = "P3"
-"compatible-device-fallback" = "iPhone10,6"
+"compatible-device-fallback" = "iPhone9,2"
+"graphics-featureset-class" = "APPLE4"
+"graphics-featureset-fallbacks" = "APPLE3:APPLE3v1:APPLE2:APPLE1:GLES2,0"
+"wifi-chipset" = "4357"
+"baseband-chipset" = "mav17"
 
 
 ["adt"."product"."u32"]
-"artwork-device-subtype" = 1773
+"artwork-device-subtype" = 2436
 "artwork-scale-factor" = 3
+"device-perf-memory-class" = 4
+"oled-display" = 1
+"thin-bezel" = 1
 
 # MGGetProductType() looks this 20-byte id up in libMobileGestalt's product
 # table; without it every client that switches on the product type sees an
-# unknown device. REQUIRED: the id for iPhone10,3, read from libMobileGestalt
-# inside the OS image. The iPadOS profile carries
-# e9fefef6e6f9d12a5ba1a2551866cbbd749f0ec3 for J120; that value belongs to a
-# different product and must not be reused here.
+# unknown device. Read from the real D22AP device tree in the IPSW.
 ["adt"."product"."bytes"]
-"product-id" = "REQUIRED_PRODUCT_ID_20_BYTES"
+"product-id" = "fd079b298144a7deb4d7c87fef3eb474d8f0e7eb"
+
+
+["adt"."buttons"]
+
+["adt"."buttons"."string"]
+"compatible" = "buttons"
+"device_type" = "buttons"
+
+["adt"."buttons"."strings"]
+"button-names" = ["volup", "voldown", "hold", "ringerab"]
+
+["adt"."buttons"."u32"]
+"home-button-type" = 2
+"button-priority_hold" = 1
+"button-priority_volup" = 2
+"button-priority_voldown" = 2
+"opposed-power-vol-buttons" = 1
 
 
 ["adt"."defaults"]
 
 ["adt"."defaults"."u32"]
-"kern.maxvnodes" = 66560
+"kern.maxvnodes" = 10000

@@ -147,6 +147,68 @@ def prelink_info(macho: bytes) -> list[dict]:
     return entries
 
 
+def adt_node(buf: bytes, off: int):
+    """One Apple device-tree node: u32 property_count, u32 child_count, then
+    properties (name[32], u32 length, value, pad to 4) and children.
+
+    The length field carries a flag in the high bit; the real length is the low
+    31 bits.
+    """
+    pcount, ccount = struct.unpack_from('<2I', buf, off)
+    off += 8
+    props = {}
+    for _ in range(pcount):
+        name = buf[off:off + 32].split(b'\0')[0].decode('utf-8', 'replace')
+        off += 32
+        length, = struct.unpack_from('<I', buf, off)
+        off += 4
+        length &= 0x7FFFFFFF
+        props[name] = buf[off:off + length]
+        off += length
+        off += (-length) % 4
+    children = []
+    for _ in range(ccount):
+        off, child = adt_node(buf, off)
+        children.append(child)
+    return off, {'name': props.get('name', b'').rstrip(b'\0').decode('utf-8', 'replace'),
+                 'props': props, 'children': children}
+
+
+def show_property(key: str, value: bytes) -> str:
+    if key == 'product-id':
+        return f'"{value.hex()}"   # {len(value)} bytes'
+    if len(value) == 4:
+        return str(struct.unpack('<I', value)[0])
+    text = value.rstrip(b'\0').decode('utf-8', 'replace')
+    return f'"{text}"'
+
+
+def device_tree_props(z: zipfile.ZipFile, manifest: dict, device_class: str) -> None:
+    """The /product, /buttons and /defaults values of the real board tree."""
+    member = f'Firmware/all_flash/DeviceTree.{device_class}.im4p'
+    try:
+        payload = im4p_payload(z.read(member))
+    except KeyError:
+        print(f'\n# no {member} in this image')
+        return
+    import liblzfse
+    try:
+        blob = liblzfse.decompress(payload)
+    except Exception:
+        blob = payload
+    _, root = adt_node(blob, 0)
+    nodes = {c['name']: c for c in root['children']}
+    for name in ('product', 'buttons', 'defaults'):
+        node = nodes.get(name)
+        if not node:
+            continue
+        print(f'\n# /{name} of {member}')
+        for key, value in node['props'].items():
+            if key in ('name', 'AAPL,phandle') or key.startswith('function-button'):
+                continue
+            print(f'#   {key} = {show_property(key, value)}')
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument('ipsw', type=Path)
@@ -208,6 +270,8 @@ def main() -> int:
     for name in sorted(k for k in by_id if k):
         entry = by_id[name]
         print(f'#   {entry.get("_PrelinkExecutableLoadAddr", "-"):>18}  {name}')
+
+    device_tree_props(z, manifest, args.device_class)
     return 0
 
 
