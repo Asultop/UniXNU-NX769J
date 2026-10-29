@@ -128,11 +128,49 @@ windows = [
 # image is installed. Read it from that volume and set it here.
 
 [firmware]
-# Produced by the uefi-nx769j Mu-Silicium platform package.
+# The uefi-nx769j Mu-Silicium platform package. Modelled directly on
+# Platforms/ZTE/nx729jPkg in UniXNU/uefi-sheng, which is a complete, hardware-
+# verified platform package for a nubia RedMagic on the same SoC family; see
+# docs/UEFI-FIRMWARE.md for the derivation and for the values still open.
+#
+# The vendor directory is ZTE, not Nubia: nubia is ZTE's brand, and the sibling
+# RedMagic package lives at Platforms/ZTE/nx729jPkg. Keeping the same vendor
+# name means the Silicon and Silicium-ACPI package paths below work unchanged.
 config = "nx769j"
-dsc = "Platforms/Nubia/nx769jPkg/nx769j.dsc"
+dsc = "Platforms/ZTE/nx769jPkg/nx769j.dsc"
 fd = "Build/nx769jPkg/{target}_CLANGPDB/FV/SILICIUM_UEFI.fd"
-packages = ["{uefi}", "{tree}/package", "{tree}/drivers/DarwinBoot", "{edk2}"]
+# A preflight script checks the vendor inputs before EDK II runs, so a missing
+# or wrong firmware binary fails here instead of deep inside a C build.
+preflight = ["scripts/check-nx769j-firmware.py"]
+# Mu-Silicium submodules this board needs. Mu_Basecore is not listed: it is the
+# separate {edk2} checkout that ./unixnu fetch resolves, and firmware.py points
+# EDK_TOOLS_PATH at it rather than at the submodule.
+submodules = [
+  "Common/Mu",
+  "Common/Mu_OEM_Sample",
+  "Silicium-ACPI",
+  "Silicon/Silicium/OpensslPkg/Library/OpensslLib/openssl",
+]
+# Applied to the shared edk2 tree for the build and reverted afterwards.
+patches = ["Resources/MuPatches/Gic-Spurious.patch"]
+# PACKAGES_PATH for the EDK II build. {tree}/package carries UniXNUPkg and
+# {tree}/drivers/DarwinBoot carries DarwinBootPkg, so the DSC can name
+# UniXNUPkg/Application/UniXNU/UniXNU.inf and DarwinBootPkg/Driver/DarwinBoot.inf
+# without those trees living in the Mu-Silicium checkout.
+packages = [
+  "{uefi}",
+  "{uefi}/Platforms/ZTE",
+  "{tree}/package",
+  "{tree}/drivers/DarwinBoot",
+  "{edk2}",
+  "{uefi}/Common/Mu",
+  "{uefi}/Common/Mu_OEM_Sample",
+  "{uefi}/Silicon/Qualcomm",
+  "{uefi}/Silicon/Silicium",
+  "{uefi}/Silicium-ACPI",
+  "{uefi}/Silicium-ACPI/Platforms/ZTE",
+  "{uefi}/Silicium-ACPI/Silicon/Qualcomm",
+]
 
 [firmware.defines]
 DEVICE_MODEL = "nx769j"
