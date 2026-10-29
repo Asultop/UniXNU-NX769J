@@ -173,14 +173,27 @@ jobs:
           config=$(find UniXNU/out -name '.config' | head -1)
           test -n "$config"
           echo "merged config: $config"
-          grep -E '^XNU_(ARM_DT_PLATFORM|ARMCPU|NATIVE_UFS|NATIVE_VIRTIO_BLOCK|NATIVE_LEGACY_DISPLAY|NATIVE_ADRENO|CRYPTO_BOOTSTRAP)=' "$config"
-          grep -qx 'XNU_NATIVE_UFS=1' "$config"
-          grep -qx 'XNU_NATIVE_VIRTIO_BLOCK=1' "$config"
-          grep -qx 'XNU_NATIVE_LEGACY_DISPLAY=1' "$config"
-          grep -qx 'XNU_NATIVE_ADRENO=0' "$config"
+          python3 UniXNU-NX769J/scripts/check-merged-config.py "$config" \
+            XNU_ARM_DT_PLATFORM=y \
+            XNU_ARMCPU=y \
+            XNU_SOURCE_CORECRYPTO14=y \
+            XNU_SOURCE_PTHREAD=y \
+            XNU_CRYPTO_BOOTSTRAP=prelinked \
+            XNU_NATIVE_AES=y \
+            XNU_NATIVE_ARCH_TIMER=y \
+            XNU_NATIVE_UFS=y \
+            XNU_NATIVE_VIRTIO_BLOCK=y \
+            XNU_NATIVE_LEGACY_DISPLAY=y \
+            XNU_NATIVE_ADRENO=n \
+            XNU_ARMVIRT_PLATFORM=n \
+            XNU_SHENG_PMGR=n
 
-      - name: Report source pin changes
-        if: always()
+      - name: Check the recorded source pins
         run: |
           echo "unixnu.lock after fetch:"
-          git -C UniXNU-NX769J --no-pager diff -- unixnu.lock || true
+          git -C UniXNU-NX769J --no-pager diff -- unixnu.lock
+          git -C UniXNU-NX769J diff --quiet -- unixnu.lock || {
+            echo '::error::unixnu.lock does not match what ./unixnu fetch resolved. Run ./unixnu fetch and commit the result.'
+            exit 1
+          }
+          echo "unixnu.lock matches the resolved sources"
