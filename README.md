@@ -26,8 +26,19 @@ firmware and partition policy. Shared code lives in
 ## Status
 
 The board description, component selection, device tree and kernel
-configuration are complete and sourced. Hardware bring-up has not run: this
-port has no firmware, no device verification and no host verification yet.
+configuration are complete and sourced. **The kernel builds and links on Linux**:
+XNU 8796 with the 64-patch rebased series, all eleven archive builders, no
+undefined symbols. Hardware bring-up has not run, so there is no device
+verification and no host verification of anything past the build.
+
+| Milestone | State |
+| --- | --- |
+| Board, component selection, device tree, kernel config | complete |
+| Kernel compiles and links on Linux | **done** |
+| Prelink | blocked — see [`porting.toml`](porting.toml) |
+| UEFI firmware | designed, not built — see [`docs/UEFI-FIRMWARE.md`](docs/UEFI-FIRMWARE.md) |
+| Payload, boot image, boot on hardware | not started |
+
 Every area states its own scope and next step in [`porting.toml`](porting.toml).
 
 Board values that no public NX769J source provides were read from a physical
