@@ -59,3 +59,4 @@ xnu-8796.101.5-security-init.patch
 xnu-8796.101.5-sparse-index.patch
 linux-clang-auto-var-init.patch
 linux-clang-uio-stackbuf-align.patch
+linux-clang-kalloc-pointee-type.patch

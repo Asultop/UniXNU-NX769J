@@ -140,7 +140,7 @@ index 74a2036..a190300 100644
  #define UIO_IS_USER_SPACE32( a_uio_t )  \
  	( (a_uio_t)->uio_segflg == UIO_USERSPACE32 || (a_uio_t)->uio_segflg == UIO_PHYS_USERSPACE32 || \
 diff --git a/bsd/vfs/vfs_attrlist.c b/bsd/vfs/vfs_attrlist.c
-index cbaa0b2..074bd09 100644
+index 522b05f..03381a9 100644
 --- a/bsd/vfs/vfs_attrlist.c
 +++ b/bsd/vfs/vfs_attrlist.c
 @@ -878,7 +878,7 @@ static int
@@ -189,10 +189,10 @@ index cbaa0b2..074bd09 100644
  	int eofflag;
  	uint64_t options;
 diff --git a/bsd/vfs/vfs_lookup.c b/bsd/vfs/vfs_lookup.c
-index a05c8e7..688fb67 100644
+index 7c93b82..1eee19a 100644
 --- a/bsd/vfs/vfs_lookup.c
 +++ b/bsd/vfs/vfs_lookup.c
-@@ -1670,7 +1670,7 @@ lookup_handle_symlink(struct nameidata *ndp, vnode_t *new_dp, bool *new_dp_has_i
+@@ -1720,7 +1720,7 @@ lookup_handle_symlink(struct nameidata *ndp, vnode_t *new_dp, bool *new_dp_has_i
  	int error;
  	char *cp;               /* pointer into pathname argument */
  	uio_t auio;

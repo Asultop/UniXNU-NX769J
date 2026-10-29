@@ -1,6 +1,8 @@
+diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
+index d14d5c1..329a781 100644
 --- a/libkern/c++/OSKext.cpp
 +++ b/libkern/c++/OSKext.cpp
-@@ -73,6 +73,11 @@
+@@ -73,6 +73,11 @@ extern "C" {
  
  #include <libkern/OSKextLibPrivate.h>
  #include <libkern/c++/OSKext.h>
@@ -12,12 +14,10 @@
  #include <libkern/c++/OSLib.h>
  
  #include <IOKit/IOLib.h>
-@@ -8446,6 +8451,43 @@
- 	result = OSRuntimeInitializeCPP(this);
- 	if (result == KERN_SUCCESS) {
+@@ -8286,6 +8291,43 @@ OSKext::start(bool startDependenciesFlag)
  		result = startfunc(kmod_info, kmodStartData);
-+	}
-+
+ 	}
+ 
 +	/* An explicitly linked security initializer must run with its real
 +	 * dependencies and constructors ready, before MAC policy lockdown.
 +	 * It executes original component code; no policy result is supplied.
@@ -53,6 +53,8 @@
 +			panic("NativePrelink: early security initializer requires MAC framework");
 +	#endif
 +		}
- 	}
- 
++	}
++
  	flags.starting = 0;
+ 
+ 	/* On success overlap the setting of started/starting. On failure just

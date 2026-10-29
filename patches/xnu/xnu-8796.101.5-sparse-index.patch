@@ -1,8 +1,8 @@
 diff --git a/osfmk/kern/kalloc.c b/osfmk/kern/kalloc.c
-index dbddc01..ada897e 100644
+index e08348b..671469d 100644
 --- a/osfmk/kern/kalloc.c
 +++ b/osfmk/kern/kalloc.c
-@@ -950,6 +950,8 @@ kalloc_type_view_copy(
+@@ -859,6 +859,8 @@ kalloc_type_view_copy(
  	}
  }
  
@@ -11,7 +11,7 @@ index dbddc01..ada897e 100644
  __startup_func
  static uint64_t
  kalloc_type_view_parse(const kalloc_type_variant_t type)
-@@ -1032,10 +1034,46 @@ kalloc_type_view_parse(const kalloc_type_variant_t type)
+@@ -941,10 +943,46 @@ kalloc_type_view_parse(const kalloc_type_variant_t type)
  		cur = prelink_sect->addr;
  		end = prelink_sect->addr + prelink_sect->size;
  
@@ -59,7 +59,7 @@ index dbddc01..ada897e 100644
  			if (kext_mh->magic == 0) {
  				/*
  				 * Assert that we have processed all kexts and all that is left
-@@ -1058,6 +1096,15 @@ kalloc_type_view_parse(const kalloc_type_variant_t type)
+@@ -967,6 +1005,15 @@ kalloc_type_view_parse(const kalloc_type_variant_t type)
  
  			for (uint32_t i = 0; i < kext_mh->ncmds && (vm_offset_t)lc < end;
  			    i++, lc = (struct load_command *)((vm_offset_t)lc + lc->cmdsize)) {
@@ -75,7 +75,7 @@ index dbddc01..ada897e 100644
  				if (lc->cmd == LC_SEGMENT_SPLIT_INFO) {
  					isSplitKext = true;
  					continue;
-@@ -1067,6 +1114,10 @@ kalloc_type_view_parse(const kalloc_type_variant_t type)
+@@ -976,6 +1023,10 @@ kalloc_type_view_parse(const kalloc_type_variant_t type)
  
  				kernel_segment_command_t *seg_cmd =
  				    (struct segment_command_64 *)(vm_offset_t)lc;
@@ -86,7 +86,7 @@ index dbddc01..ada897e 100644
  				/*
  				 * Parse kalloc_type section
  				 */
-@@ -1100,7 +1151,9 @@ kalloc_type_view_parse(const kalloc_type_variant_t type)
+@@ -1009,7 +1060,9 @@ kalloc_type_view_parse(const kalloc_type_variant_t type)
  				break;
  			}
  
