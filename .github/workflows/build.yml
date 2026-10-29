@@ -205,7 +205,6 @@ jobs:
             XNU_ARMCPU=y \
             XNU_SOURCE_CORECRYPTO14=y \
             XNU_SOURCE_PTHREAD=y \
-            XNU_SOURCE_MOCKFS=y \
             XNU_CRYPTO_BOOTSTRAP=prelinked \
             XNU_NATIVE_AES=y \
             XNU_NATIVE_ARCH_TIMER=y \
