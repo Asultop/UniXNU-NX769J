@@ -93,6 +93,44 @@ Other regions read from the same node, for the areas that will consume them:
 | `gpu_microcode_region` | `0x9b09a000` / `0x2000` |
 | `non_secure_display_region` | size `0xa400000`, `alloc-ranges 0x0 0xffffffff` (allocated at runtime) |
 
+**This is not the complete list.** The UEFI memory map needs every reservation,
+and the four above are the ones read at the time. Re-run the `ls` and read each
+node's `reg` before building the firmware map; see
+[`firmware/README.md`](firmware/README.md).
+
+### Cross-check against the public firmware dump {#dump}
+
+The splash reservation is confirmed by a second, independent source: the DTBO
+partition of [`Klozz/nubia_nx769j_dump`](https://github.com/Klozz/nubia_nx769j_dump),
+a public dump of this device's firmware.
+
+```
+curl -L -o dtbo.dtb "https://raw.githubusercontent.com/Klozz/nubia_nx769j_dump/<branch>/dtbo/18_dtbdump_Qualcomm_Technologies,_Inc._Pineapple_QRD.dtb"
+dtc -I dtb -O dts dtbo.dtb -o dtbo.dts
+```
+
+| Node | In the dump | Measured on the device |
+| --- | --- | --- |
+| `splash_region` `label = "cont_splash_region"` | `reg = <0x00 0xe3940000 0x00 0x2b00000>` | `0xe3940000` / `0x2b00000` |
+| `disp_rdump_region` `label = "disp_rdump_region"` | `reg = <0xe3940000 0x800000>` | not read |
+| `demura_region_0`, `demura_region_1` | `reg = <0 0 0 0>` (runtime) | not read |
+
+The two agree exactly on the splash, which is the one reservation the boot image
+has to advertise. `disp_rdump_region` is an eighth-megabyte display ramdump
+window at the same base address, inside the splash region, and was not in the
+measured set.
+
+The same overlay declares `model = "Qualcomm Technologies, Inc. Pineapple QRD"`
+with `compatible = "qcom,pineapple-qrd", "qcom,pineapple", "qcom,pineapplep-qrd",
+"qcom,pineapplep", "qcom,qrd"`, which is where the base-board name in
+`porting.toml` comes from.
+
+The dump is an **overlay**, applied on top of a base DTB it does not contain: the
+repository has `dtbo.img` and its extracted trees but no `vendor_boot` and no
+base `dtb`. `gunyah_hyp_region`, `gpu_microcode_region` and the vendor
+reservations live in that base, so the firmware DTB and the full memory map both
+still need the device.
+
 ## DRAM
 
 `gunyah_hyp_region@80000000` and the lowest System RAM range both place the

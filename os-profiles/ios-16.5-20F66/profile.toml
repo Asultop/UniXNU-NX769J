@@ -136,14 +136,24 @@
 
 
 ["payload"]
-# REQUIRED: fixups of signed text, carried in /chosen/text-fixups by
+# Fixups of signed text, carried in /chosen/text-fixups by
 # patches/xnu/native-text-fixup.patch. The format is
-#   name,hex,hex-bytes,hex-bytes   (see scripts/unixnu/payload.py)
+#   name,offset,original-bytes,replacement-bytes   (see scripts/unixnu/payload.py)
 # for example dyld_shared_cache_arm64.15,421e8bc,28ad1bb0008544f9,c0035fd6008544f9
-# They are derived from the dyld shared cache inside the OS image, so they
-# cannot be read from the IPSW container alone. The placeholder is left in place
-# so the payload step fails loudly instead of silently omitting the fixups.
-"text_fixups" = ["REQUIRED_TEXT_FIXUP_name_hex_bytes_bytes"]
+# where c0035fd6 is `ret`: the entries disable code in a signed file after it has
+# passed signature validation, and only when the original bytes still match.
+#
+# Empty, and that is the honest state rather than an approval. No fixup has been
+# determined for this port: they are not derivable from the IPSW container, since
+# each one is a specific byte change in the dyld shared cache inside
+# 096-04088-077.dmg, chosen to bypass whatever turns out to be in the way. The
+# right time to add one is when a boot gets far enough to fail on one. An empty
+# list means "none needed yet", not "none will be".
+#
+# (A placeholder value here would only add a second failure to a payload step
+# that already stops for want of --unique-chip-id, and a fabricated string in a
+# config is worse than an honest empty list.)
+"text_fixups" = []
 # Trust cache bundle hashes this board accepts, checked against the file passed
 # with --trust-cache. These are the two trust caches shipped in the IPSW.
 "trust_cache_sha256" = [

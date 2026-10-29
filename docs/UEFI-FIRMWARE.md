@@ -235,6 +235,7 @@ Where the two agree, and where they do not:
 | `HYP` | `0x80000000` / `0x00A00000` | `0x80000000` / `0x00E00000` | **differs** — `gunyah_hyp_region` |
 | Contiguous splash | `0xB8000000` / `0x2B00000` | `0xE3940000` / `0x2B00000` | **differs** — `splash_region`, `cont_splash_region` |
 | `gpu_microcode_region` | absent | `0x9B09A000` / `0x2000` | **absent from the map** |
+| `disp_rdump_region` | absent | `0xE3940000` / `0x800000` | **absent from the map** — a display ramdump window inside the splash region, from the public firmware dump |
 | XBL DT, AOP, SMEM, PIL, TZApps, HW Fence, … | present | not measured | unverified |
 
 The size of the splash matches what sheng and shennong use, and its end —
