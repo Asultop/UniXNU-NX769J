@@ -251,3 +251,4 @@ Not selected, and why:
 | Images | [Prelink](https://unixnu.com/concepts/prelink), [payload](https://unixnu.com/concepts/payload), [boot chain](https://unixnu.com/concepts/boot-chain) |
 | Verification | [Building](https://unixnu.com/building), [bring-up](https://unixnu.com/porting/bring-up), [log capture](https://unixnu.com/porting/log-capture) |
 | Record | [Porting records](https://unixnu.com/porting/records), [`porting.toml`](porting.toml) |
+| Sibling port | [UniXNU-nx729j](https://github.com/2713385115/UniXNU-nx729j) — RedMagic 8 Pro+ (NX729J, SM8550), same brand and one generation back. Its UEFI firmware boots on hardware and its `boot.img` reaches `fastboot boot OKAY`. It carries a `NativeGoodixTouch` driver, which is the driver family this board's input area needs, and its porting notes record build pitfalls that apply here. |

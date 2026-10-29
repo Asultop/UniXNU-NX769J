@@ -131,13 +131,22 @@ packages = ["{uefi}", "{tree}/package", "{tree}/drivers/DarwinBoot", "{edk2}"]
 [firmware.defines]
 DEVICE_MODEL = "nx769j"
 
-# Android 14 on this board rejects boot images below header version 4
-# (BOARD_BOOTIMG_HEADER_VERSION := 4) and uses 4096-byte pages with kernel base
-# 0x0 (BOARD_KERNEL_BASE := 0x00000000).
+# The NX769J board configuration records BOARD_BOOTIMG_HEADER_VERSION := 4, but
+# that is the Android build system's setting for building a stock boot.img, not
+# what unixnu can pack and verify. scripts/unixnu/bootimg.py verify() unpacks
+# ten u32 words from offset 8 and compares header_version and pagesize at the
+# v0/v1/v2 offsets; a v4 header has those fields elsewhere, so the round-trip
+# check fails with "boot image header does not match the requested parameters".
+# The tool's own DEFAULTS use header_version 0.
+#
+# The sibling RedMagic port UniXNU-nx729j hit exactly this and fixed it the same
+# way, then fastboot-booted the image on hardware. If the NX769J ABL turns out
+# to reject a v0 image, the answer is to extend verify() for v4 rather than to
+# set the value here.
 [bootimg.image]
 base = 0x0
 pagesize = 4096
-header_version = 4
+header_version = 0
 
 # The stock bootloader keeps the contiguous-splash region and expects it in the
 # boot image's device tree. Measured on the device from
