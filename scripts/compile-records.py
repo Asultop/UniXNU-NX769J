@@ -18,6 +18,16 @@ build:
 The script is a transparent wrapper: it writes the record and then execs the
 command it was given, so a failing compile still fails and the record matches
 the invocation that produced the object.
+
+XNU's C rule compiles without -o and lets clang derive the object name from the
+source. Replay consumers do not all handle that: build-mockfs-fixture.py and
+build-libpthread-kernel.py both substitute -o on the assumption that the record
+carries one, and without it clang writes the object into the record's working
+directory and the consumer then fails to find its own destination path. The
+record therefore states the output explicitly when the invocation leaves it
+implicit. -o <stem>.o in the record's directory is what clang does anyway, so
+replaying the recorded arguments still produces the same object; only the
+omitted flag is made explicit.
 """
 from __future__ import annotations
 
@@ -44,25 +54,27 @@ def input_file(arguments: list[str]) -> str | None:
     return None
 
 
+def inferred_output(source: str) -> str:
+    stem = os.path.basename(source)
+    return os.path.splitext(stem)[0] + '.o'
+
+
 def main() -> int:
     arguments = sys.argv[1:]
     if not arguments:
         return os.execvp('true', ['true'])
 
-    output = output_path(arguments)
     source = input_file(arguments)
-    # XNU's C rule compiles without -o and lets clang derive the object name from
-    # the source, so fall back to that. The make working directory is the object
-    # directory, which is where the archive builders look for the record.
-    if not output and source:
-        stem = os.path.basename(source)
-        stem = os.path.splitext(stem)[0]
-        output = f'{stem}.o'
+    output = output_path(arguments)
+    recorded = arguments
+    if source and not output:
+        output = inferred_output(source)
+        recorded = [*arguments, '-o', output]
     if output and source:
         record = {
             'directory': os.getcwd(),
             'file': source,
-            'arguments': arguments,
+            'arguments': recorded,
         }
         target = f'{output}.json'
         try:

@@ -398,8 +398,16 @@ jobs:
       # Parallel make interleaves its output so heavily that the diagnostic for
       # the failing compile is garbled past reading. On failure, repeat serially
       # so the log names the actual error, then fail.
+      #
+      # CCACHE points XNU's `$(CCACHE) $(CC)` hook at the compile recorder. The
+      # archive builders replay a per-object recipe, {directory, file, arguments},
+      # and nothing on Linux writes those records without it, so the archive stage
+      # stops at the first builder that reads one. The recorder is a transparent
+      # wrapper: it writes the record and then execs the real compiler.
       - name: Build the kernel
         working-directory: UniXNU
+        env:
+          CCACHE: python3 ${{ github.workspace }}/UniXNU-NX769J/scripts/compile-records.py
         run: |
           if UNIXNU_TOOLCHAIN="$HOME/unixnu-linux" ./unixnu build kernel -D ../UniXNU-NX769J; then
             echo "kernel build passed"
@@ -414,6 +422,9 @@ jobs:
         run: |
           find UniXNU/out -maxdepth 6 -name 'kernel.macho*' -o -name '*.unstripped.noctf' 2>/dev/null | head
           find UniXNU/out -name '*.log' 2>/dev/null | head -20
+          records=$(find UniXNU/out -name '*.o.json' | wc -l)
+          echo "compile records written: $records"
+          test "$records" -gt 0 || echo '::warning::no compile records; the archive builders replay them and will fail'
 
       # The compile errors land in the build logs rather than on stdout, so ship
       # them as an artifact instead of leaving a failed run undiagnosable.

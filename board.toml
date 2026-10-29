@@ -57,6 +57,13 @@ include = [
 defconfig = "nx769j_defconfig"
 # Archive builders run in order before the kernel link. component:<ID> runs the
 # component's own build entry from the catalog.
+#
+# build-mockfs-fixture.py is deliberately absent. It compiles an offline test
+# fixture, and the kernel only force-loads it when MOCKFS_MODE is 1
+# (build-xnu-4k-baseline.sh reads MOCKFS_MODE from XNU_SOURCE_MOCKFS). This
+# board leaves CONFIG_XNU_SOURCE_MOCKFS unset, so the archive is never a link
+# input and building it only adds a stage that can fail. Add it back, and turn
+# CONFIG_XNU_SOURCE_MOCKFS on, together.
 archives = [
   "build-corecrypto-14.py",
   "build-corecrypto-14.py --namespace",
@@ -64,7 +71,6 @@ archives = [
   "component:ArmCpu",
   "component:SoftwareAES",
   "build-software-aes-bindings.py",
-  "build-mockfs-fixture.py",
   "build-libpthread-kernel.py",
   "component:ShengUfs",
   "component:VirtioMmioBlock",
