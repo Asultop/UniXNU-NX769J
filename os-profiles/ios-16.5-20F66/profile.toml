@@ -57,7 +57,13 @@
 
 ["kernel"."prelink"]
 "tool" = "kits/XnuPrelink/emit_prelink.py"
-"kernel" = "build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf"
+# xnu-8796 links no .unstripped.noctf. Its MakeInc.kernel lists five primary
+# outputs -- .unstripped, the stripped kernel, .dSYM, .link and the static
+# archive -- and the .noctf variant UniXNU's scripts expect is a later XNU
+# naming. The raw linked kernel is this train's equivalent: it carries no CTF
+# section, so there is nothing to strip. Pointing at the name xnu-10063 uses
+# fails with "not found; run unixnu build kernel first" even after a clean link.
+"kernel" = "build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped"
 # sha256 of the decompressed arm64 kernelcache Mach-O, which is what
 # scripts/unixnu/ipsw.py writes to kernelcache.decompressed. The pipeline is
 # IMG4 payload -> LZFSE decode -> the single 0x0100000c fat slice, and the pin

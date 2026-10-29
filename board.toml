@@ -64,6 +64,14 @@ defconfig = "nx769j_defconfig"
 # board leaves CONFIG_XNU_SOURCE_MOCKFS unset, so the archive is never a link
 # input and building it only adds a stage that can fail. Add it back, and turn
 # CONFIG_XNU_SOURCE_MOCKFS on, together.
+#
+# build-virtio-mmio-bindings.py is replaced by build-storage-bindings.py. The
+# former binds the block driver through build/storage-abi/interface-audit.json,
+# which audit-storage-interface.py derives from the iPadOS 17.7.11 kernelcache
+# and cross-checks against a live gdb observation of the IOBlockStorageDevice
+# metaclass -- neither of which an iOS 16.5 port has. The latter binds the same
+# 190 slots from scripts/prelink-storage-bindings.json, measured statically out
+# of the kernelcache by scripts/scan-prelink-storage.py, so it needs no device.
 archives = [
   "build-corecrypto-14.py",
   "build-corecrypto-14.py --namespace",
@@ -73,8 +81,9 @@ archives = [
   "build-software-aes-bindings.py",
   "build-libpthread-kernel.py",
   "component:ShengUfs",
+  "build-verified-root.py",
   "component:VirtioMmioBlock",
-  "build-virtio-mmio-bindings.py --component VirtioMmioBlock",
+  "build-storage-bindings.py",
 ]
 config_fragments = ["arch:configs/common.config", "soc:configs/sm8550.config", "os:configs/ios.config"]
 # The rebased patch series lives in this repository and is applied on its own.

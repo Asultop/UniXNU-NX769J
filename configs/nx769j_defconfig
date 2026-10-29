@@ -29,6 +29,18 @@ CONFIG_XNU_NATIVE_CS_HASH_CACHE=y
 CONFIG_XNU_NATIVE_UFS=y
 CONFIG_XNU_NATIVE_VIRTIO_BLOCK=y
 
+# Two archives the link needs but that no config flag pulls in on its own.
+# ShengUfs subclasses IOBlockStorageDevice, which lives in the prelinked
+# IOStorageFamily kext: compiling the class in as well registers it twice and
+# panics, so libStorageBindings.a resolves the inherited slots to the original
+# prelinked code with absolute symbols. libVerifiedRoot.a carries the real
+# VerifiedRoot crypto together with this board's policy table, which is empty
+# until a signed bundle exists.
+#
+# [kernel] archives builds both before the link; this puts them on the link line
+# so ld64 pulls the members in against the driver's unresolved references.
+CONFIG_XNU_EXTRA_LD_ARCHIVES="-Wl,-force_load,{tree}/build/io-storage-family/libStorageBindings.a -Wl,-force_load,{tree}/build/verified-root/libVerifiedRoot.a"
+
 # Display. GopFramebuffer presents through the UEFI GOP framebuffer that the
 # uefi-nx769j firmware publishes, but its kernel-side provider is a late
 # archive that no builder in this tree produces yet, and the symbols it would
