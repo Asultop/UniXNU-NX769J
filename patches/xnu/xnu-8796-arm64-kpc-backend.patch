@@ -1,6 +1,6 @@
 diff --git a/osfmk/arm64/kpc.c b/osfmk/arm64/kpc.c
 new file mode 100644
-index 0000000..74655b6
+index 0000000..751df93
 --- /dev/null
 +++ b/osfmk/arm64/kpc.c
 @@ -0,0 +1,76 @@
@@ -18,7 +18,7 @@ index 0000000..74655b6
 + * than partial.
 + */
 +#include <kern/kpc.h>
-+#include <machine/kpc.h>
++#include <machine/machine_kpc.h>
 +#include <stdint.h>
 +
 +/* Whether the hardware can capture the program counter; it cannot here. */

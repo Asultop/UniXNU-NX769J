@@ -205,13 +205,15 @@ jobs:
             XNU_ARMCPU=y \
             XNU_SOURCE_CORECRYPTO14=y \
             XNU_SOURCE_PTHREAD=y \
+            XNU_SOURCE_MOCKFS=y \
             XNU_CRYPTO_BOOTSTRAP=prelinked \
             XNU_NATIVE_AES=y \
             XNU_NATIVE_ARCH_TIMER=y \
             XNU_NATIVE_UFS=y \
             XNU_NATIVE_VIRTIO_BLOCK=y \
-            XNU_NATIVE_LEGACY_DISPLAY=y \
             XNU_NATIVE_ADRENO=n \
+            XNU_NATIVE_LEGACY_DISPLAY=n \
+            XNU_NATIVE_MOBILE_DISPLAY=n \
             XNU_ARMVIRT_PLATFORM=n \
             XNU_SHENG_PMGR=n
 
