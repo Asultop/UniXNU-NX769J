@@ -112,16 +112,31 @@ fixups. The fixups only matter once
 
 ### The patch rebase
 
-The whole resolved patch order targets `xnu-10063.141.1`: 55 patches in the
-ARM64 profile, 2 in the SoC source, and 2 in `XnuPrelink`
-(`xnu-10063.141.1-security-init.patch`, `xnu-10063.141.1-sparse-index.patch`).
-None of them applies to 8796 as it stands, so
-[`os-profiles/ios-16.5-20F66/patches/xnu/series`](os-profiles/ios-16.5-20F66/patches/xnu/series)
-is deliberately empty: a version-10063 path in a series makes
-`unixnu status` abort with `patch missing` and blocks every later step.
+The whole resolved patch order targets `xnu-10063.141.1`. Measured against
+`xnu-8796.101.5` with `git apply --check`:
 
-Rebasing the ARM64 and SoC series onto `xnu-8796`, and adding 8796 prelink
-patches to `XnuPrelink`, is the blocking image-assembly work. See the
+| Status | Count |
+| --- | --- |
+| applies unchanged | 46 |
+| applies with `-C1` | 1 |
+| needs the hunk re-anchored | 11 |
+| structural | 1 |
+
+So 47 of 59 carry over as they are and 12 need work, and the failures cluster
+into a few files rather than being spread out — four of them touch
+`bsd/kern/kern_exec.c`. The one structural case,
+`zzx-pmap-sync-64bit-pa.patch`, targets `osfmk/arm64/sptm/pmap/pmap.c`, which
+does not exist in 8796; its `osfmk/arm/pmap/pmap.c` half does, so it has to be
+ported to the 8796 pmap layout rather than dropped.
+
+Per-patch status and the reproduce commands are in
+[`os-profiles/ios-16.5-20F66/patch-rebase.md`](os-profiles/ios-16.5-20F66/patch-rebase.md).
+
+Until the series is complete,
+[`os-profiles/ios-16.5-20F66/patches/xnu/series`](os-profiles/ios-16.5-20F66/patches/xnu/series)
+stays empty: a version-10063 path in a series makes `unixnu status` abort with
+`patch missing` and blocks every later step. Adding 8796 prelink patches to
+`XnuPrelink` is the other half of the image-assembly work. See the
 [patch workflow](https://unixnu.com/xnu/source-and-patches).
 
 ## Prerequisites
