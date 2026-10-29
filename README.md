@@ -70,24 +70,32 @@ be contributed to UniXNU once it is complete.
 `[ipsw]` and `[kernel.prelink]` are inherited from that profile rather than
 repeated in `board.toml`, so the values below are edited in one file.
 
-### What is still required
+### What is filled and what is not
 
-Every field marked `REQUIRED_IPSW` in the profile is read out of the restore
-image and cannot be filled without it. A wrong kernelcache hash or
-`early_security_init` address panics the kernel; a wrong root list fails
-prelink.
+The prelink ABI is version bound. None of these values can be copied from the
+iPadOS profile — the 16.5 kernelcache puts `AppleMobileFileIntegrity` at
+`0xfffffff004e2b640` where 17.7.11 has `0xfffffff005ab4ae0`, and it does not
+contain `com.apple.iokit.IOHIDEventDriver` at all.
 
-| Field | Source |
-| --- | --- |
-| `ipsw.url`, member `[ipsw.sha256]` | The iOS 16.5 (20F66) restore image for `iPhone10,3` |
-| `ipsw.chip_id`, `ipsw.board_id` | The IPSW `BuildManifest` (`ApChipID`, `ApBoardID`) |
-| `kernel.prelink.kernelcache_sha256` | sha256 of the decompressed kernelcache |
-| `kernel.prelink.early_security_init` | Slid load address of `AppleMobileFileIntegrity` in that kernelcache |
-| `kernel.prelink.roots` | Bundle identifiers kept from that kernelcache |
-| `payload.text_fixups`, `payload.trust_cache_sha256` | That build's dyld cache and trust caches |
-| `adt.product.bytes.product-id` | The MobileGestalt 20-byte product id for the chosen product |
+`scripts/extract-ipsw-pins.py` reads every value below out of the restore image
+and reproduces them.
 
-Do not copy these from the iPadOS profile. The prelink ABI is version bound.
+| Field | Value | Status |
+| --- | --- | --- |
+| `ipsw.chip_id`, `ipsw.board_id` | `32789` (0x8015), `6` | **filled** from `BuildManifest` |
+| `[ipsw.sha256]` OS | `64354ba3…` for `096-04088-077.dmg` | **filled** |
+| `[ipsw.sha256]` SystemOS | `2279bf44…` for `096-04666-078.dmg` | **filled** |
+| `kernel.prelink.kernelcache_sha256` | `e6fa7559…` | **filled** — the decompressed arm64 slice |
+| `kernel.prelink.early_security_init` | `…=0xfffffff004e2b640` | **filled** from `__PRELINK_INFO` |
+| `kernel.prelink.roots` | 30 bundle identifiers | **filled**, each verified present |
+| `payload.trust_cache_sha256` | the two IPSW trust caches | **filled** |
+| `ipsw.url` | member name | restore images are not redistributable; pass `--ipsw` or `UNIXNU_IPSW` |
+| `payload.text_fixups` | — | **open** — from the dyld shared cache inside the OS image |
+| `adt.product.bytes.product-id` | — | **open** — from `libMobileGestalt` inside the OS image |
+
+The two open fields live inside `096-04088-077.dmg`, not in the IPSW container,
+so they need that image mounted or extracted. `text_fixups` keeps a placeholder
+so the payload step fails loudly rather than silently dropping the fixups.
 
 ### The patch rebase
 

@@ -13,11 +13,10 @@
 # The community iOS 16 ports (dipa-studio/ios-sweet and the ios-topaz family)
 # build the same train.
 #
-# Values marked REQUIRED_IPSW cannot be produced without the target IPSW: they
-# are read out of its kernelcache, trust caches and BuildManifest. The procedure
-# for each is at the bottom of this file and in README.md. Do not guess them: a
-# wrong kernelcache hash or early_security_init address panics the kernel, and a
-# wrong root list fails prelink.
+# The IPSW-derived values below were read out of
+# iPhone10,3,iPhone10,6_16.5_20F66_Restore.ipsw with
+# scripts/extract-ipsw-pins.py, which reproduces every one of them. The kexts
+# carry CFBundleVersion 22.5.0, which independently confirms the Darwin version.
 
 ["os"]
 "name" = "ios-16.5-20F66"
@@ -30,25 +29,28 @@
 
 
 ["ipsw"]
-# REQUIRED_IPSW: the iOS 16.5 (20F66) restore image for iPhone10,3. The image
-# must match the product, version, build, device class, chip ID and board ID
-# below. Apple's public CDN path for a given build is device specific.
-"url" = "REQUIRED_IPSW_URL"
+# The restore image is not redistributable. The value is the member name so the
+# entry is self-identifying; point the build at a local copy with --ipsw or
+# UNIXNU_IPSW. Apple names the file
+# iPhone10,3,iPhone10,6_16.5_20F66_Restore.ipsw.
+"url" = "iPhone10,3,iPhone10,6_16.5_20F66_Restore.ipsw"
 "product" = "iPhone10,3"
 "version" = "16.5"
 "build" = "20F66"
 "device_class" = "d22ap"
-# REQUIRED_IPSW: from the IPSW BuildManifest (ApChipID and ApBoardID). Written
-# as strings so the file parses and any reader fails loudly instead of silently
-# treating a placeholder as chip 0.
-"chip_id" = "REQUIRED_IPSW_CHIP_ID"
-"board_id" = "REQUIRED_IPSW_BOARD_ID"
+# BuildManifest BuildIdentities for d22ap: ApChipID 0x8015, ApBoardID 0x06.
+# Restore.plist DeviceMap agrees: BDID 6, BoardConfig d22ap, CPID 32789,
+# Platform t8015, SDOM 1. d221ap (iPhone10,6) uses ApBoardID 0x0E instead.
+"chip_id" = 32789
+"board_id" = 6
 "fetch" = ["KernelCache", "DeviceTree", "StaticTrustCache", "Cryptex1,SystemTrustCache"]
 
 ["ipsw"."sha256"]
-# REQUIRED_IPSW: member hashes pinned per member file name. The IPSW reader
+# Member hashes pinned by member file name. These are the two disk images the
+# [userdata] windows consume: OS and Cryptex1,SystemOS. unixnu ipsw fetch
 # checks every extracted member against its pin.
-"REQUIRED_IPSW_MEMBER" = "REQUIRED_IPSW_SHA256"
+"096-04088-077.dmg" = "64354ba3475d3c34d6fc531f75585a7b24af0fdb7a3a8a2bdf95c7f351a3f290"
+"096-04666-078.dmg" = "2279bf443856fcb6a3f00b1fa06a32ba02a66fdf6ab6b12019462c7498aafdd3"
 
 
 ["kernel"]
@@ -56,25 +58,72 @@
 ["kernel"."prelink"]
 "tool" = "kits/XnuPrelink/emit_prelink.py"
 "kernel" = "build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf"
-# REQUIRED_IPSW: sha256 of the decompressed kernelcache extracted from the IPSW.
-"kernelcache_sha256" = "REQUIRED_IPSW_KERNELCACHE_SHA256"
+# sha256 of the decompressed arm64 kernelcache Mach-O, which is what
+# scripts/unixnu/ipsw.py writes to kernelcache.decompressed. The pipeline is
+# IMG4 payload -> LZFSE decode -> the single 0x0100000c fat slice, and the pin
+# covers that slice only. Hashing the whole fat image gives a different digest
+# and would fail the pin check.
+"kernelcache_sha256" = "e6fa75598f47b5a9460a60913e2ac8e4cd6cd60eb475bb31da65b68ffbcfdad5"
 "slide" = "-0x1000000"
-# REQUIRED_IPSW: "com.apple.driver.AppleMobileFileIntegrity=<address>" where
-# <address> is the slid load address of AppleMobileFileIntegrity's early
-# security init in this kernelcache. The iPadOS 17.7.11 profile carries
-# 0xfffffff005ab4ae0 for its own kernelcache; that address is version specific
-# and must not be copied here. Leave the hook unset to skip the path entirely,
-# which is what the caihong SM8650 port does on a SoC without an Apple PMGR.
-"early_security_init" = "REQUIRED_IPSW_EARLY_SECURITY_INIT"
-# REQUIRED_IPSW: bundle identifiers kept from this kernelcache. Read them from
-# the prelinked kernelcache, not from another profile's list.
-"roots" = ["REQUIRED_IPSW_ROOT_COMPONENT"]
+# The slid load address of AppleMobileFileIntegrity's early security init in
+# this kernelcache, read from the __PRELINK_INFO dictionary. The iPadOS 17.7.11
+# profile carries 0xfffffff005ab4ae0 for its own kernelcache; the addresses are
+# version bound and must not be copied between profiles. Leave the hook unset to
+# skip the path entirely, which is what the caihong SM8650 port does on a SoC
+# without an Apple PMGR.
+"early_security_init" = "com.apple.driver.AppleMobileFileIntegrity=0xfffffff004e2b640"
+# Bundle identifiers kept from this kernelcache. Every entry below is present in
+# the iOS 16.5 kernelcache's __PRELINK_INFO. The iPadOS 17.7.11 list also keeps
+# com.apple.iokit.IOHIDEventDriver, which this kernelcache does not contain.
+"roots" = [
+  "com.apple.AppleFSCompression.AppleFSCompressionTypeZlib",
+  "com.apple.driver.AppleARMPlatform",
+  "com.apple.driver.AppleARMWatchdogTimer",
+  "com.apple.driver.AppleAudioClockLibs",
+  "com.apple.driver.AppleEffaceableStorage",
+  "com.apple.driver.AppleIISController",
+  "com.apple.driver.AppleM2ScalerCSCDriver",
+  "com.apple.driver.AppleMobileFileIntegrity",
+  "com.apple.driver.ApplePMGR",
+  "com.apple.driver.IODARTFamily",
+  "com.apple.filesystems.apfs",
+  "com.apple.iokit.CoreAnalyticsFamily",
+  "com.apple.iokit.IOAVFamily",
+  "com.apple.iokit.IOAudio2Family",
+  "com.apple.iokit.IOCECFamily",
+  "com.apple.iokit.IOCryptoAcceleratorFamily",
+  "com.apple.iokit.IOGPUFamily",
+  "com.apple.iokit.IOHDCPFamily",
+  "com.apple.iokit.IOHIDFamily",
+  "com.apple.iokit.IOMobileGraphicsFamily",
+  "com.apple.iokit.IOReportFamily",
+  "com.apple.iokit.IOSlowAdaptiveClockingFamily",
+  "com.apple.iokit.IOStorageFamily",
+  "com.apple.iokit.IOSurface",
+  "com.apple.kec.Libm",
+  "com.apple.kec.corecrypto",
+  "com.apple.kext.AppleMatch",
+  "com.apple.kext.CoreTrust",
+  "com.apple.security.AppleImage4",
+  "com.apple.security.sandbox",
+]
 
 
 ["payload"]
-"text_fixups" = ["REQUIRED_IPSW_TEXT_FIXUP"]
-# REQUIRED_IPSW: accepted trust cache bundle hashes for this build.
-"trust_cache_sha256" = ["REQUIRED_IPSW_TRUST_CACHE_SHA256"]
+# REQUIRED: fixups of signed text, carried in /chosen/text-fixups by
+# patches/xnu/native-text-fixup.patch. The format is
+#   name,hex,hex-bytes,hex-bytes   (see scripts/unixnu/payload.py)
+# for example dyld_shared_cache_arm64.15,421e8bc,28ad1bb0008544f9,c0035fd6008544f9
+# They are derived from the dyld shared cache inside the OS image, so they
+# cannot be read from the IPSW container alone. The placeholder is left in place
+# so the payload step fails loudly instead of silently omitting the fixups.
+"text_fixups" = ["REQUIRED_TEXT_FIXUP_name_hex_bytes_bytes"]
+# Trust cache bundle hashes this board accepts, checked against the file passed
+# with --trust-cache. These are the two trust caches shipped in the IPSW.
+"trust_cache_sha256" = [
+  "df0f60fd05b7c312ad0fddb5c85d8adf97b487e8500518337bc4cbde3ca73ea7",
+  "501fa23c4620e68e48b91bd2ba8d74251d4fbe37147290650cf717bbef619616",
+]
 
 
 ["adt"]
@@ -121,10 +170,13 @@
 "artwork-scale-factor" = 3
 
 # MGGetProductType() looks this 20-byte id up in libMobileGestalt's product
-# table. Without it every client that switches on the product type sees an
-# unknown device. REQUIRED_IPSW: the id for the chosen product.
+# table; without it every client that switches on the product type sees an
+# unknown device. REQUIRED: the id for iPhone10,3, read from libMobileGestalt
+# inside the OS image. The iPadOS profile carries
+# e9fefef6e6f9d12a5ba1a2551866cbbd749f0ec3 for J120; that value belongs to a
+# different product and must not be reused here.
 ["adt"."product"."bytes"]
-"product-id" = "REQUIRED_IPSW_PRODUCT_ID"
+"product-id" = "REQUIRED_PRODUCT_ID_20_BYTES"
 
 
 ["adt"."defaults"]
