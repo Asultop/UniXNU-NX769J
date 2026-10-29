@@ -88,12 +88,26 @@ chip_id = 32785
 board_id = 12
 fetch = ["KernelCache", "DeviceTree", "StaticTrustCache", "Cryptex1,SystemTrustCache"]
 
-# [userdata] is intentionally absent. first_lba and last_lba are the extents of
-# the GPT entry named "userdata" and a wrong range overwrites an unrelated
-# partition. They must be read from the live GPT before this table is added:
-#   adb shell "sgdisk --print /dev/block/sda"
-# The same applies to [[bootimg.dtb_node]] splash reservation and to
-# payload.adt.root_match_volume_uuid. All three are recorded in porting.toml.
+[userdata]
+# Measured on the device with `sgdisk --print /dev/block/sda`; see
+# device-inputs.md. userdata is /dev/block/sda12 and ends on the last usable
+# sector, so it is the last occupied partition and no unixnu partition exists
+# yet. The GPT holds 32 entries and uses 12.
+#
+# Writing the OS windows into these extents overwrites Android's /data. To keep
+# the stock system bootable, carve a separate unixnu partition first; see
+# README.md and https://unixnu.com/porting/dual-system-partition.
+first_lba = 3302184
+last_lba = 124002298
+lba_bytes = 4096
+windows = [
+  { name = "OS", component = "OS" },
+  { name = "SystemOS", component = "Cryptex1,SystemOS" },
+]
+
+# payload.adt.root_match_volume_uuid is the one board input still open: it is
+# the APFS volume UUID inside the OS window, which only exists once the iPadOS
+# image is installed. Read it from that volume and set it here.
 
 [firmware]
 # Produced by the uefi-nx769j Mu-Silicium platform package.
@@ -112,6 +126,18 @@ DEVICE_MODEL = "nx769j"
 base = 0x0
 pagesize = 4096
 header_version = 4
+
+# The stock bootloader keeps the contiguous-splash region and expects it in the
+# boot image's device tree. Measured on the device from
+# /proc/device-tree/reserved-memory/splash_region; see device-inputs.md. The
+# node name and the cont_splash_region label follow the same convention as
+# UniXNU-sheng, and the region size 0x2b00000 matches sheng and shennong.
+[[bootimg.dtb_node]]
+path = "/reserved-memory/splash_region"
+props = [
+  { name = "label", type = "s", value = "cont_splash_region" },
+  { name = "reg", type = "x", value = ["0x0", "0xe3940000", "0x0", "0x2b00000"] },
+]
 
 [payload]
 volume = "NX769JESP"

@@ -38,16 +38,25 @@
         reg = <0 0x80000000 0 0x80000000>;
     };
 
-    // Reservations recorded on the board. The stock bootloader keeps a
-    // contiguous-splash region that the firmware hands over; its address and
-    // size are board specific and are not in any public NX769J source, so no
-    // reservation is declared here yet. Once read from the firmware memory map
-    // it goes here and in board.toml as a [[bootimg.dtb_node]] entry, the way
-    // sheng declares /reserved-memory/splash_region.
+    // Reservations measured on the device from
+    // /proc/device-tree/reserved-memory/splash_region (see device-inputs.md).
+    // The stock bootloader keeps this contiguous-splash region and hands it to
+    // the firmware. The node name and the cont_splash_region label follow the
+    // convention UniXNU-sheng uses; the region size 0x2b00000 is also the one
+    // sheng and shennong declare. Only the address is board specific.
+    //
+    // board.toml re-adds the same node to the boot image's device tree through
+    // a [[bootimg.dtb_node]] entry, which is what the stock bootloader reads.
     reserved-memory {
         #address-cells = <2>;
         #size-cells = <2>;
         ranges;
+
+        splash_region: framebuffer@e3940000 {
+            label = "cont_splash_region";
+            reg = <0 0xe3940000 0 0x2b00000>;
+            no-map;
+        };
     };
 };
 

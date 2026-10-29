@@ -29,19 +29,23 @@ configuration are complete and sourced. Hardware bring-up has not run: this
 port has no firmware, no device verification and no host verification yet.
 Every area states its own scope and next step in [`porting.toml`](porting.toml).
 
-Four values cannot be sourced from any public NX769J reference and are left
-open on purpose. They are safety critical or identity critical, so they are
-never guessed:
+Board values that no public NX769J source provides were read from a physical
+device over read-only adb and recorded in
+[`device-inputs.md`](device-inputs.md), with the command behind each value.
 
-| Value | Goes in | Why it is open |
+| Value | Status | Recorded in |
 | --- | --- | --- |
-| `userdata` first/last LBA, block size | `board.toml` `[userdata]` | A wrong range overwrites an unrelated partition |
-| Splash reservation | `dts/nx769j.dts`, `board.toml` `[[bootimg.dtb_node]]` | Board specific, taken from the firmware memory map |
-| OS window APFS volume UUID | `board.toml` `payload.adt.root_match_volume_uuid` | Read from the installed OS image |
-| DRAM size per SKU | `dts/nx769j.dts` `memory` | 8 to 24 GiB depending on SKU |
+| `userdata` first/last LBA, block size | **measured** 3302184 / 124002298 / 4096 | `board.toml` `[userdata]` |
+| Splash reservation | **measured** `0xe3940000` / `0x2b00000`, `cont_splash_region` | `dts/nx769j.dts`, `board.toml` `[[bootimg.dtb_node]]` |
+| Panel geometry | **measured** 1116x2480 | `porting.toml` display area |
+| DRAM base and SKU | **measured** base `0x80000000`, 16 GiB unit | `dts/nx769j.dts` `memory` |
+| OS window APFS volume UUID | **open** — exists only inside the installed iPadOS image | `board.toml` `payload.adt.root_match_volume_uuid` |
 
-Run [`scripts/collect-device-inputs.sh`](scripts/collect-device-inputs.sh) on the
-device to produce all four.
+Re-run the commands in [`device-inputs.md`](device-inputs.md) before writing
+anything to a device: the recorded GPT extents describe one unit at one point
+in time, and a different SKU or a repartitioned device has different bounds.
+[`scripts/collect-device-inputs.sh`](scripts/collect-device-inputs.sh) is the
+same procedure in runnable form.
 
 ## Prerequisites
 
@@ -90,11 +94,11 @@ NX769J satisfies the layout requirements that can be checked offline:
 
 | Requirement | NX769J |
 | --- | --- |
-| Filesystem F2FS, 4096-byte blocks | `recovery.fstab` mounts `/data` as f2fs on `userdata` |
+| Filesystem F2FS, 4096-byte blocks | Logical sector size is 4096 (measured). `recovery.fstab` mounts `/data` as f2fs; confirm the live filesystem and F2FS section geometry with `partition.py inspect` |
 | Compatible TWRP with root ADB | Several NX769J TWRP device trees exist |
-| Kernel supports `F2FS_IOC_RESIZE_FS` | Kernel 6.1.25; validate the recovery kernel on the device |
-| `userdata` is the last occupied partition, free GPT entry present | **Unverified** — run `partition.py inspect` |
-| Encryption is direct userdata or one mapping backed only by userdata | **Unverified** — NX769J has a separate f2fs `metadata` partition |
+| Kernel supports `F2FS_IOC_RESIZE_FS` | Stock kernel 6.1; validate the recovery kernel on the device |
+| `userdata` is the last occupied partition, free GPT entry present | **Satisfied** — `userdata` is `sda12`, ends on the last usable sector, and 12 of 32 GPT entries are used (measured) |
+| Encryption is direct userdata or one mapping backed only by userdata | **Unverified** — NX769J has a separate f2fs `metadata` partition; a stacked mapping makes the tool refuse |
 
 ### Verify the stock system still boots
 
