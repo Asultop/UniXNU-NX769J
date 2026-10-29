@@ -1,0 +1,19 @@
+# OS patch series for xnu-8796 (iOS 16.5 / Darwin 22.5.0). One patch path per
+# line in application order; `#` starts a comment. Relative paths resolve from
+# this directory. Prefixes `arch:`, `soc:`, `device:` select their profile
+# roots and `component:<ID>/path` selects a component file.
+#
+# Intentionally empty. Every patch in the resolved order today targets
+# xnu-10063.141.1:
+#
+#   arch:patches/xnu/series              55 patches written against 10063.141.1
+#   soc:patches/xnu/series               2 patches from UniXNU-sm8550-common
+#   component:XnuPrelink/patches/        xnu-10063.141.1-security-init.patch
+#                                        xnu-10063.141.1-sparse-index.patch
+#
+# XnuPrelink ships no xnu-8796 patch, and the arch and SoC series have to be
+# rebased onto the 8796 baseline before they are referenced here. Putting a
+# version-10063 path in this file makes `unixnu status` abort with
+# "patch missing" and blocks every later step, so the series stays empty until
+# the rebase is done. Record the rebase progress in the packaging area of
+# porting.toml.

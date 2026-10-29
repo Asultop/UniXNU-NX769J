@@ -52,4 +52,4 @@ commit = "c0e60fb5ecfc54cf379c261d3f9572cc22ded891"
 commit = "23b2049fcd9e30356161def84231334fb55ecca9"
 
 [source."xnu"]
-commit = "d8b80295118ef25ac3a784134bcf95cd8e88109f"
+commit = "aca3beaa3dfbd42498b42c5e5ce20a938e6554e5"

@@ -44,6 +44,15 @@ statements and ordinary punctuation.
 
 ## Board facts that are easy to get wrong
 
+- The target is **iOS 16.5 (build 20F66, Darwin 22.5.0, XNU 8796)** with an
+  iPhone X identity, not the iPadOS 17.7.11 profile UniXNU ships. The profile
+  is `os-profiles/ios-16.5-20F66/` and has to land in `UniXNU/profiles/os/`
+  before a build resolves. Do not fill its `REQUIRED_IPSW` fields from the
+  iPadOS profile: the prelink ABI is version bound.
+- The whole patch order targets `xnu-10063.141.1` and does not apply to
+  `xnu-8796` yet. The OS series is deliberately empty for that reason; a
+  version-mismatched patch path makes `unixnu status` abort with
+  `patch missing`.
 - The SoC source is `UniXNU-sm8550-common`. Its register map matches SM8650 for
   every resource this port drives, but its CPU core names and Adreno generation
   do not. Keep the per-node overrides in `dts/nx769j.dts` and

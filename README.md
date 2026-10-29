@@ -15,7 +15,8 @@ firmware and partition policy. Shared code lives in
 | Codename | `nx769j` (NX769J) |
 | SoC | Qualcomm SM8650 "pineapple", Adreno 750 |
 | Base board | Qualcomm Pineapple QRD (`qcom,pineapple-qrd`) |
-| OS profile | `ipados-17.7.11-21H461` (XNU 10063.141.1) |
+| OS profile | `ios-16.5-20F66` — iOS 16.5 (build 20F66), Darwin 22.5.0, XNU 8796.101.5 |
+| Identity | iPhone X (`iPhone10,3` / D22AP) forged by the ADT |
 | Display | 1116x2480 at 480 dpi |
 | Boot | UEFI, Android 14 ABL, boot header version 4, 4096-byte pages |
 | Storage | UFS, A/B, userdata on f2fs |
@@ -46,6 +47,61 @@ anything to a device: the recorded GPT extents describe one unit at one point
 in time, and a different SKU or a repartitioned device has different bounds.
 [`scripts/collect-device-inputs.sh`](scripts/collect-device-inputs.sh) is the
 same procedure in runnable form.
+
+## Target: iOS 16.5
+
+This port runs **iOS 16.5 (build 20F66)**, not iPadOS. The ADT forges an
+**iPhone X** identity (`iPhone10,3` / `D22AP`).
+
+XNU 8796 is the iOS 16 kernel. The profile pins
+`xnu-8796.101.5` (`aca3beaa3dfbd42498b42c5e5ce20a938e6554e5`), the earliest
+open-source drop of the 8796 train and the closest to Darwin 22.5.0. The
+community iOS 16 ports — `dipa-studio/ios-sweet` and the `ios-topaz` family —
+build the same train.
+
+### Where the profile lives
+
+`board.os_profile` names a directory under `UniXNU/profiles/os/`. UniXNU ships
+only `ipados-17.7.11-21H461`, so this port keeps its own profile at
+[`os-profiles/ios-16.5-20F66/`](os-profiles/ios-16.5-20F66/profile.toml). The
+Build workflow installs it into the UniXNU checkout before resolving. It should
+be contributed to UniXNU once it is complete.
+
+`[ipsw]` and `[kernel.prelink]` are inherited from that profile rather than
+repeated in `board.toml`, so the values below are edited in one file.
+
+### What is still required
+
+Every field marked `REQUIRED_IPSW` in the profile is read out of the restore
+image and cannot be filled without it. A wrong kernelcache hash or
+`early_security_init` address panics the kernel; a wrong root list fails
+prelink.
+
+| Field | Source |
+| --- | --- |
+| `ipsw.url`, member `[ipsw.sha256]` | The iOS 16.5 (20F66) restore image for `iPhone10,3` |
+| `ipsw.chip_id`, `ipsw.board_id` | The IPSW `BuildManifest` (`ApChipID`, `ApBoardID`) |
+| `kernel.prelink.kernelcache_sha256` | sha256 of the decompressed kernelcache |
+| `kernel.prelink.early_security_init` | Slid load address of `AppleMobileFileIntegrity` in that kernelcache |
+| `kernel.prelink.roots` | Bundle identifiers kept from that kernelcache |
+| `payload.text_fixups`, `payload.trust_cache_sha256` | That build's dyld cache and trust caches |
+| `adt.product.bytes.product-id` | The MobileGestalt 20-byte product id for the chosen product |
+
+Do not copy these from the iPadOS profile. The prelink ABI is version bound.
+
+### The patch rebase
+
+The whole resolved patch order targets `xnu-10063.141.1`: 55 patches in the
+ARM64 profile, 2 in the SoC source, and 2 in `XnuPrelink`
+(`xnu-10063.141.1-security-init.patch`, `xnu-10063.141.1-sparse-index.patch`).
+None of them applies to 8796 as it stands, so
+[`os-profiles/ios-16.5-20F66/patches/xnu/series`](os-profiles/ios-16.5-20F66/patches/xnu/series)
+is deliberately empty: a version-10063 path in a series makes
+`unixnu status` abort with `patch missing` and blocks every later step.
+
+Rebasing the ARM64 and SoC series onto `xnu-8796`, and adding 8796 prelink
+patches to `XnuPrelink`, is the blocking image-assembly work. See the
+[patch workflow](https://unixnu.com/xnu/source-and-patches).
 
 ## Prerequisites
 

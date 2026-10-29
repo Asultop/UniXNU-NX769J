@@ -1,0 +1,133 @@
+# iOS 16.5 OS profile for UniXNU.
+#
+# Target: iOS 16.5 (build 20F66), Darwin 22.5.0, XNU 8796.
+# Identity: iPhone X (iPhone10,3 / D22AP).
+#
+# This profile belongs at UniXNU/profiles/os/ios-16.5-20F66/. It is kept in the
+# device repository until it is contributed to UniXNU; the Build workflow
+# installs it into the UniXNU checkout before resolving. See README.md.
+#
+# XNU 8796 is the iOS 16 kernel. The open-source releases of the 8796 train are
+# xnu-8796.101.5, xnu-8796.121.2 and xnu-8796.141.3; xnu-8796.101.5 is the
+# earliest and is the closest drop to Darwin 22.5.0, so it is the baseline here.
+# The community iOS 16 ports (dipa-studio/ios-sweet and the ios-topaz family)
+# build the same train.
+#
+# Values marked REQUIRED_IPSW cannot be produced without the target IPSW: they
+# are read out of its kernelcache, trust caches and BuildManifest. The procedure
+# for each is at the bottom of this file and in README.md. Do not guess them: a
+# wrong kernelcache hash or early_security_init address panics the kernel, and a
+# wrong root list fails prelink.
+
+["os"]
+"name" = "ios-16.5-20F66"
+"darwin" = "22.5.0"
+"xnu_version" = "8796.101.5"
+"xnu_revision" = "aca3beaa3dfbd42498b42c5e5ce20a938e6554e5"
+"driverkit_tag" = "xnu-8796.101.5"
+"trustcache_tag" = "xnu-8796.101.5"
+"abi" = ["IOGPUFamily", "IOHIDFamily-2031.120.4", "IOMobileGraphicsFamily"]
+
+
+["ipsw"]
+# REQUIRED_IPSW: the iOS 16.5 (20F66) restore image for iPhone10,3. The image
+# must match the product, version, build, device class, chip ID and board ID
+# below. Apple's public CDN path for a given build is device specific.
+"url" = "REQUIRED_IPSW_URL"
+"product" = "iPhone10,3"
+"version" = "16.5"
+"build" = "20F66"
+"device_class" = "d22ap"
+# REQUIRED_IPSW: from the IPSW BuildManifest (ApChipID and ApBoardID). Written
+# as strings so the file parses and any reader fails loudly instead of silently
+# treating a placeholder as chip 0.
+"chip_id" = "REQUIRED_IPSW_CHIP_ID"
+"board_id" = "REQUIRED_IPSW_BOARD_ID"
+"fetch" = ["KernelCache", "DeviceTree", "StaticTrustCache", "Cryptex1,SystemTrustCache"]
+
+["ipsw"."sha256"]
+# REQUIRED_IPSW: member hashes pinned per member file name. The IPSW reader
+# checks every extracted member against its pin.
+"REQUIRED_IPSW_MEMBER" = "REQUIRED_IPSW_SHA256"
+
+
+["kernel"]
+
+["kernel"."prelink"]
+"tool" = "kits/XnuPrelink/emit_prelink.py"
+"kernel" = "build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf"
+# REQUIRED_IPSW: sha256 of the decompressed kernelcache extracted from the IPSW.
+"kernelcache_sha256" = "REQUIRED_IPSW_KERNELCACHE_SHA256"
+"slide" = "-0x1000000"
+# REQUIRED_IPSW: "com.apple.driver.AppleMobileFileIntegrity=<address>" where
+# <address> is the slid load address of AppleMobileFileIntegrity's early
+# security init in this kernelcache. The iPadOS 17.7.11 profile carries
+# 0xfffffff005ab4ae0 for its own kernelcache; that address is version specific
+# and must not be copied here. Leave the hook unset to skip the path entirely,
+# which is what the caihong SM8650 port does on a SoC without an Apple PMGR.
+"early_security_init" = "REQUIRED_IPSW_EARLY_SECURITY_INIT"
+# REQUIRED_IPSW: bundle identifiers kept from this kernelcache. Read them from
+# the prelinked kernelcache, not from another profile's list.
+"roots" = ["REQUIRED_IPSW_ROOT_COMPONENT"]
+
+
+["payload"]
+"text_fixups" = ["REQUIRED_IPSW_TEXT_FIXUP"]
+# REQUIRED_IPSW: accepted trust cache bundle hashes for this build.
+"trust_cache_sha256" = ["REQUIRED_IPSW_TRUST_CACHE_SHA256"]
+
+
+["adt"]
+
+["adt"."root"]
+
+["adt"."root"."string"]
+"model" = "iPhone10,3"
+"target-type" = "D22"
+# The board name first: the audio server keys its routing database and
+# MediaExperience its per-board tables on it.
+"compatible" = "D22AP"
+
+
+["adt"."chosen"]
+
+["adt"."chosen"."string"]
+"osenvironment" = "main"
+"crypto-hash-method" = "sha2-384"
+
+
+["adt"."chosen"."u32"]
+"certificate-production-status" = 0
+"effective-production-status-ap" = 0
+"certificate-security-mode" = 1
+"effective-security-mode-sep" = 1
+"amfi-only-platform-code" = 1
+
+
+["adt"."product"]
+
+["adt"."product"."string"]
+"product-name" = "iPhone X"
+"product-description" = "iPhone X"
+# A phone, not a pad: the iPadOS profile sets artwork-device-idiom to pad and
+# that drives the layout of every userland surface.
+"artwork-device-idiom" = "phone"
+"artwork-display-gamut" = "P3"
+"compatible-device-fallback" = "iPhone10,6"
+
+
+["adt"."product"."u32"]
+"artwork-device-subtype" = 1773
+"artwork-scale-factor" = 3
+
+# MGGetProductType() looks this 20-byte id up in libMobileGestalt's product
+# table. Without it every client that switches on the product type sees an
+# unknown device. REQUIRED_IPSW: the id for the chosen product.
+["adt"."product"."bytes"]
+"product-id" = "REQUIRED_IPSW_PRODUCT_ID"
+
+
+["adt"."defaults"]
+
+["adt"."defaults"."u32"]
+"kern.maxvnodes" = 66560

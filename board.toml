@@ -23,7 +23,11 @@ soc = "SM8650"
 # compatible strings and the Adreno generation do differ and are overridden in
 # dts/nx769j.dts and configs/nx769j_defconfig.
 soc_source = "sm8550"
-os_profile = "ipados-17.7.11-21H461"
+# iOS 16.5 (build 20F66), Darwin 22.5.0, XNU 8796. The profile lives in this
+# repository at os-profiles/ios-16.5-20F66/ until it is contributed to
+# UniXNU/profiles/os/. This is a phone target: the ADT forges an iPhone X
+# identity, not the iPad identity the shipped UniXNU profile uses.
+os_profile = "ios-16.5-20F66"
 description = "nubia RedMagic 9 Pro / 9 Pro+ / 9S Pro / 9S Pro+ (NX769J)"
 kit = "nx769j"
 
@@ -66,7 +70,7 @@ archives = [
   "component:VirtioMmioBlock",
   "build-virtio-mmio-bindings.py --component VirtioMmioBlock",
 ]
-config_fragments = ["arch:configs/common.config", "soc:configs/sm8550.config", "os:configs/ipados.config"]
+config_fragments = ["arch:configs/common.config", "soc:configs/sm8550.config", "os:configs/ios.config"]
 patch_series = ["arch:patches/xnu/series", "soc:patches/xnu/series", "os:patches/xnu/series", "device:patches/xnu/series"]
 
 # kernel.prelink is inherited from profiles/os/ipados-17.7.11-21H461/profile.toml:
@@ -75,18 +79,15 @@ patch_series = ["arch:patches/xnu/series", "soc:patches/xnu/series", "os:patches
 # reports "AMFI: No PMGR?" panics from early_security_init on a SoC without an
 # Apple PMGR block; see the packaging area of porting.toml before enabling it.
 
-[ipsw]
-# The restored image is an iPad Pro 12.9-inch (2nd generation) restore image.
-# The ADT forges the platform identity, so the IPSW model does not describe the
-# phone. Pinned hashes are in the OS profile.
-url = "https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw"
-product = "iPad7,1"
-version = "17.7.11"
-build = "21H461"
-device_class = "j120ap"
-chip_id = 32785
-board_id = 12
-fetch = ["KernelCache", "DeviceTree", "StaticTrustCache", "Cryptex1,SystemTrustCache"]
+# [ipsw] and [kernel.prelink] are inherited from the selected OS profile
+# (os-profiles/ios-16.5-20F66/profile.toml). Tables merge by key, so a board
+# that needs to override one field can declare just that field here.
+#
+# The restored image is an iOS 16.5 (20F66) iPhone X restore image. The ADT
+# forges that identity onto this board, so the IPSW model does not describe the
+# phone. Several fields in the profile are marked REQUIRED_IPSW: they are read
+# out of the restore image and cannot be filled without it. Keeping [ipsw] in
+# one place means those values are edited in one file, not two.
 
 [userdata]
 # Measured on the device with `sgdisk --print /dev/block/sda`; see
@@ -161,7 +162,10 @@ root_match_volume_uuid = "REQUIRED_ROOT_VOLUME_UUID"
 cpu_regs = "0"
 psci_method = "smc"
 packed_data_ramdisk = true
-ipad_identity = true
+# This is a phone target, so the iPhone identity from the OS profile applies.
+# The iPadOS 17.7.11 profile sets ipad_identity because it forges an iPad; the
+# iOS 16.5 profile forges iPhone X (iPhone10,3 / D22AP) instead.
+ipad_identity = false
 unique_chip_id = "required"
 
 [device_tree]

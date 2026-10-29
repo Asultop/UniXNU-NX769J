@@ -5,7 +5,8 @@ name: Build
 #   validate         repository structure, TOML, pins, defconfig, and the UniXNU
 #                    porting-record checker against the real component catalog
 #   device-tree      compiles dts/nx769j.dts against the pinned SoC DTSI with dtc
-#   resolve          runs the real UniXNU build driver through the documented
+#   resolve          installs the device-provided OS profile into the UniXNU
+#                    checkout, then runs the build driver through the documented
 #                    step 4 sequence: fetch resolves every source pin, defconfig
 #                    merges the ordered profile fragments, tree assembles the
 #                    build tree, and status reports the resolved profiles,
@@ -131,6 +132,23 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
+      # board.os_profile names a directory under UniXNU/profiles/os/. This port
+      # targets ios-16.5-20F66, which does not exist upstream yet, so the
+      # profile ships in this repository and is installed into the checkout
+      # before resolving. It must be contributed to UniXNU once it is complete.
+      - name: Install the OS profile
+        run: |
+          profile=$(python3 -c "import tomllib;print(tomllib.load(open('UniXNU-NX769J/board.toml','rb'))['board']['os_profile'])")
+          echo "os profile: $profile"
+          if [ -d "UniXNU-NX769J/os-profiles/$profile" ]; then
+            mkdir -p "UniXNU/profiles/os"
+            cp -R "UniXNU-NX769J/os-profiles/$profile" "UniXNU/profiles/os/$profile"
+            echo "installed device-provided profile"
+          else
+            echo "using the profile already in UniXNU"
+          fi
+          test -f "UniXNU/profiles/os/$profile/profile.toml"
 
       - name: Restore the source cache
         uses: actions/cache@v4
