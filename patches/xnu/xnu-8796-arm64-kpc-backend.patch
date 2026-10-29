@@ -1,0 +1,82 @@
+diff --git a/osfmk/arm64/kpc.c b/osfmk/arm64/kpc.c
+new file mode 100644
+index 0000000..74655b6
+--- /dev/null
++++ b/osfmk/arm64/kpc.c
+@@ -0,0 +1,76 @@
++/*
++ * arm64 kernel performance counter backend.
++ *
++ * The xnu-8796 open source drop lists osfmk/arm64/kpc.c in osfmk/conf/files.arm64
++ * but does not ship the file; only the x86_64 backend is published. The hooks
++ * below are the arm64 interface that osfmk/kern/kpc_common.c and cpu.c call.
++ *
++ * This board drives no ARM performance monitor unit, so every hook reports that
++ * no counters are running and nothing is configured. The shape of the answers
++ * matters: kpc_common.c asks is_running_* before it reads counters, and cpu.c
++ * calls kpc_idle on every idle entry, so these must be cheap and total rather
++ * than partial.
++ */
++#include <kern/kpc.h>
++#include <machine/kpc.h>
++#include <stdint.h>
++
++/* Whether the hardware can capture the program counter; it cannot here. */
++int kpc_pc_capture = 0;
++
++void
++kpc_idle(void)
++{
++}
++
++void
++kpc_idle_exit(void)
++{
++}
++
++boolean_t
++kpc_is_running_fixed(void)
++{
++	return FALSE;
++}
++
++boolean_t
++kpc_is_running_configurable(uint64_t pmc_mask)
++{
++	(void)pmc_mask;
++	return FALSE;
++}
++
++uint32_t
++kpc_rawpmu_config_count(void)
++{
++	return 0;
++}
++
++int
++kpc_set_config_arch(struct kpc_config_remote *mp_config)
++{
++	(void)mp_config;
++	return 0;
++}
++
++int
++kpc_set_period_arch(struct kpc_config_remote *mp_config)
++{
++	(void)mp_config;
++	return 0;
++}
++
++int
++kpc_set_running_arch(struct kpc_running_remote *mp_config)
++{
++	(void)mp_config;
++	return 0;
++}
++
++int
++kpc_set_sw_inc(uint32_t mask)
++{
++	(void)mask;
++	return 0;
++}

@@ -61,4 +61,4 @@ linux-clang-auto-var-init.patch
 linux-clang-uio-stackbuf-align.patch
 linux-clang-kalloc-pointee-type.patch
 linux-clang-iorpc-kernel-content.patch
-xnu-8796-drop-missing-arm64-kpc.patch
+xnu-8796-arm64-kpc-backend.patch

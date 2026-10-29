@@ -30,8 +30,14 @@ CONFIG_XNU_NATIVE_UFS=y
 CONFIG_XNU_NATIVE_VIRTIO_BLOCK=y
 
 # Display. GopFramebuffer presents through the UEFI GOP framebuffer that the
-# uefi-nx769j firmware publishes.
-CONFIG_XNU_NATIVE_LEGACY_DISPLAY=y
+# uefi-nx769j firmware publishes, but its kernel-side provider is a late
+# archive that no builder in this tree produces yet, and the symbols it would
+# define (native_legacy_display_probe, native_legacy_display_provider_probe)
+# are referenced from bsd_init and IOUserClient behind these very flags. Both
+# stay off until the archive exists, so the kernel links headless. Turn them on
+# together with the archive.
+# CONFIG_XNU_NATIVE_LEGACY_DISPLAY is not set
+# CONFIG_XNU_NATIVE_MOBILE_DISPLAY is not set
 
 # soc:configs/sm8550.config sets CONFIG_XNU_NATIVE_ADRENO=y. The SM8550 GPU
 # stack targets Adreno 740; NX769J has Adreno 750 (qcom,adreno-43051401 with
