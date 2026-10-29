@@ -112,7 +112,7 @@ fixups. The fixups only matter once
 
 ### The patch rebase
 
-**Done and verified.** All 59 patches apply strictly, in order, onto
+**Done and verified.** All 64 patches apply strictly, in order, onto
 `xnu-8796.101.5`. The series is in
 [`patches/xnu/`](patches/xnu/series) and `board.toml` selects it on its own,
 because the shared `arch:`, `soc:` and `os:` series still target
@@ -124,6 +124,11 @@ because the shared `arch:`, `soc:` and `os:` series still target
 | hunk re-anchored | 2 |
 | hunk dropped (include line absent in 8796) | 2 |
 | patch dropped entirely | 2 |
+| added for this train | 4 |
+
+The four additions are the arm64 kpc backend xnu-8796 does not ship, both
+IORPC definitions the interface generator expects, and the build fixes for
+upstream clang.
 
 The two dropped patches, `pgz-aligned-validation` and
 `published-freezer-condition`, patch code that xnu-8796 does not have and that
@@ -251,4 +256,5 @@ Not selected, and why:
 | Images | [Prelink](https://unixnu.com/concepts/prelink), [payload](https://unixnu.com/concepts/payload), [boot chain](https://unixnu.com/concepts/boot-chain) |
 | Verification | [Building](https://unixnu.com/building), [bring-up](https://unixnu.com/porting/bring-up), [log capture](https://unixnu.com/porting/log-capture) |
 | Record | [Porting records](https://unixnu.com/porting/records), [`porting.toml`](porting.toml) |
+| Package and flash | [`docs/FLASHING.md`](docs/FLASHING.md) — assemble the image and start it with `fastboot boot`, including which steps write to the device |
 | Sibling port | [UniXNU-nx729j](https://github.com/2713385115/UniXNU-nx729j) — RedMagic 8 Pro+ (NX729J, SM8550), same brand and one generation back. Its UEFI firmware boots on hardware and its `boot.img` reaches `fastboot boot OKAY`. It carries a `NativeGoodixTouch` driver, which is the driver family this board's input area needs, and its porting notes record build pitfalls that apply here. |
