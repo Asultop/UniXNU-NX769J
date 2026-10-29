@@ -394,9 +394,19 @@ jobs:
           print('patch order matches patches/xnu/series')
           PY
 
+      # Parallel make interleaves its output so heavily that the diagnostic for
+      # the failing compile is garbled past reading. On failure, repeat serially
+      # so the log names the actual error, then fail.
       - name: Build the kernel
         working-directory: UniXNU
-        run: UNIXNU_TOOLCHAIN="$HOME/unixnu-linux" ./unixnu build kernel -D ../UniXNU-NX769J
+        run: |
+          if UNIXNU_TOOLCHAIN="$HOME/unixnu-linux" ./unixnu build kernel -D ../UniXNU-NX769J; then
+            echo "kernel build passed"
+          else
+            echo "::warning::parallel build failed; repeating serially for a readable diagnostic"
+            rm -rf out/nx769j/*/nx769j/logs
+            UNIXNU_TOOLCHAIN="$HOME/unixnu-linux" ./unixnu build kernel -j 1 -D ../UniXNU-NX769J
+          fi
 
       - name: Report the kernel
         if: always()
