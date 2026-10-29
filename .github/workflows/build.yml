@@ -300,6 +300,19 @@ jobs:
         with:
           python-version: '3.12'
 
+      # The host dependencies come from apt, not from the toolchain cache, so
+      # they have to be installed even when the cached toolchain is restored.
+      # Without this the cache hit skips setup-toolchain.py and --check then
+      # fails on missing libclang, libbsd and the build tools.
+      - name: Install the host dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config ninja-build cmake flex bison \
+            python3 python3-dev xz-utils bzip2 cpio rsync curl wget \
+            libssl-dev zlib1g-dev libbsd-dev uuid-dev llvm-dev libclang-dev \
+            tcsh unifdef mtools device-tree-compiler
+
       # Restore and save are separate steps. The kernel job is expected to fail
       # while this port is being brought up, and actions/cache's combined form
       # only saves on success, so without an explicit save the entry is never
