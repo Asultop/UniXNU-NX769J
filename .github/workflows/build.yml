@@ -300,12 +300,17 @@ jobs:
         with:
           python-version: '3.12'
 
+      # save-always: the kernel job is expected to fail while it is being brought
+      # up, and actions/cache only saves on success by default. Without this the
+      # toolchain is rebuilt from source on every run, which is the whole 37
+      # minutes.
       - name: Restore the toolchain cache
         id: toolchain
         uses: actions/cache@v4
         with:
           path: ~/unixnu-linux
           key: unixnu-linux-toolchain-${{ hashFiles('UniXNU/scripts/linux/**') }}
+          save-always: true
 
       # Install under the runner's home, not /opt. The installer runs as root and
       # /opt/unixnu-linux ends up root owned; actions/cache packs as the runner
