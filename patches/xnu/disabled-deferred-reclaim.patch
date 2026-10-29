@@ -1,0 +1,12 @@
+diff --git a/osfmk/vm/vm_user.c b/osfmk/vm/vm_user.c
+index 4d14c9f..4aaf0ff 100644
+--- a/osfmk/vm/vm_user.c
++++ b/osfmk/vm/vm_user.c
+@@ -4404,7 +4404,6 @@ mach_vm_deferred_reclamation_buffer_init(
+ 	(void) task;
+ 	(void) address;
+ 	(void) size;
+-	(void) indices;
+ 	return KERN_NOT_SUPPORTED;
+ #endif /* CONFIG_DEFERRED_RECLAIM */
+ }
