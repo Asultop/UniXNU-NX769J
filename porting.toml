@@ -34,6 +34,16 @@ kind = "source"
 reference = "device-inputs.md"
 result = "Measured board inputs with the read-only adb commands that produced them"
 
+[[area.evidence]]
+kind = "source"
+reference = ".github/workflows/build.yml"
+result = "The Build workflow sets CCACHE to scripts/compile-records.py for the kernel step, so the per-object compile recipes the archive builders replay are produced on CI as they are locally, and reports how many were written"
+
+[[area.evidence]]
+kind = "source"
+reference = "board.toml"
+result = "The [kernel] archives list drops build-mockfs-fixture.py, which the kernel only force-loads when MOCKFS_MODE is 1, and [firmware] gains the full uefi-nx769j platform package table"
+
 [[area]]
 id = "firmware"
 status = "planned"
@@ -271,6 +281,21 @@ kind = "source"
 reference = "scripts/extract-ipsw-pins.py"
 result = "Reproducible extraction of chip_id, board_id, member hashes, kernelcache_sha256, early_security_init, the kext inventory and the ADT identity from the restore image"
 
+[[area.evidence]]
+kind = "source"
+reference = "patches/libpthread/xnu-8796-no-jit-entitlement.patch"
+result = "Stops libpthread advertising PTHREAD_FEATURE_JIT_ENTITLED, whose proc_get_jit_entitled callback xnu-8796 does not have; the other 59 of the 60 callbacks the pinned libpthread uses resolve against that kernel"
+
+[[area.evidence]]
+kind = "source"
+reference = "patches/libpthread/README.md"
+result = "Why the device carries a patches/libpthread directory at all: module resolution is first-wins and it shadows UniXNU's, so explicit-kernel-address.patch is carried byte for byte rather than lost"
+
+[[area.evidence]]
+kind = "source"
+reference = "scripts/compile-records.py"
+result = "Records each XNU compile as <object>.json and now states the output explicitly when the invocation leaves it implicit, which is what build-mockfs-fixture.py and build-libpthread-kernel.py need in order to substitute -o"
+
 [[area]]
 id = "diagnostics"
 status = "planned"
@@ -290,3 +315,7 @@ reference = "device-inputs.md"
 result = "Measured identity, partition geometry, reserved memory, DRAM, register map, display and input facts with the read-only commands that produced them"
 evidence = []
 
+[[area.evidence]]
+kind = "source"
+reference = "scripts/check-nx769j-firmware.py"
+result = "Preflight for the uefi-nx769j platform package, jointly owned with the firmware area because it matches the scripts/check-* pattern as well as the firmware pattern: it checks the Mu-Silicium layout, board.toml agreement, the SM8650 SoC package include and the vendor DXE inventory, and was exercised against mutated fixtures"
