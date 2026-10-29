@@ -300,23 +300,21 @@ jobs:
         with:
           python-version: '3.12'
 
-      # save-always: the kernel job is expected to fail while it is being brought
-      # up, and actions/cache only saves on success by default. Without this the
-      # toolchain is rebuilt from source on every run, which is the whole 37
-      # minutes.
+      # Restore and save are separate steps. The kernel job is expected to fail
+      # while this port is being brought up, and actions/cache's combined form
+      # only saves on success, so without an explicit save the entry is never
+      # written and every run rebuilds clang from source.
       - name: Restore the toolchain cache
         id: toolchain
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ~/unixnu-linux
           key: unixnu-linux-toolchain-${{ hashFiles('UniXNU/scripts/linux/**') }}
-          save-always: true
 
-      # Install under the runner's home, not /opt. The installer runs as root and
-      # /opt/unixnu-linux ends up root owned; actions/cache packs as the runner
-      # user and silently fails to save root-owned trees, which is why the cache
-      # never persisted and every run rebuilt clang from source. The path is
-      # expanded before sudo, which resets HOME to /root.
+      # Install under the runner's home, not /opt. The path is expanded before
+      # sudo, which resets HOME to /root. scripts/unixnu/kernel.py resolves the
+      # toolchain through UNIXNU_TOOLCHAIN, so the same variable drives both the
+      # install and the build.
       - name: Install the Linux toolchain
         if: steps.toolchain.outputs.cache-hit != 'true'
         working-directory: UniXNU
@@ -324,6 +322,13 @@ jobs:
           TOOLCHAIN="$HOME/unixnu-linux"
           sudo env UNIXNU_TOOLCHAIN="$TOOLCHAIN" python3 scripts/linux/setup-toolchain.py "$TOOLCHAIN"
           sudo chown -R "$(id -u):$(id -g)" "$TOOLCHAIN"
+
+      - name: Save the toolchain cache
+        if: always() && steps.toolchain.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/unixnu-linux
+          key: unixnu-linux-toolchain-${{ hashFiles('UniXNU/scripts/linux/**') }}
 
       - name: Check the toolchain
         working-directory: UniXNU
