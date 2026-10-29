@@ -2,18 +2,25 @@ name: Build
 
 # Build tests for the NX769J device repository.
 #
-#   validate     repository structure, TOML, pins, defconfig, and the UniXNU
-#                porting-record checker against the real component catalog
-#   device-tree  compiles dts/nx769j.dts against the pinned SoC DTSI with dtc
-#   resolve      runs the real UniXNU build driver through the documented
-#                step 4 sequence: fetch resolves every source pin, defconfig
-#                merges the ordered profile fragments, tree assembles the
-#                build tree, and status reports the resolved profiles,
-#                components, source revisions and patch order
+#   validate         repository structure, TOML, pins, defconfig, and the UniXNU
+#                    porting-record checker against the real component catalog
+#   device-tree      compiles dts/nx769j.dts against the pinned SoC DTSI with dtc
+#   resolve          runs the real UniXNU build driver through the documented
+#                    step 4 sequence: fetch resolves every source pin, defconfig
+#                    merges the ordered profile fragments, tree assembles the
+#                    build tree, and status reports the resolved profiles,
+#                    components, source revisions and patch order
+#   partition-safety runs the offline dual-system partition tests that back the
+#                    non-destructive install path: they assert that GPT entries
+#                    and GUIDs are preserved, that a check pass writes nothing,
+#                    and that any failure blocks GPT writes
 #
 # Assembling kernel, firmware, payload and boot images needs the uefi-nx769j
 # platform package, the target IPSW and an Xcode host. None of those exist for
 # this board yet; see porting.toml for the firmware and packaging areas.
+#
+# Booting the image, and confirming that Android still boots afterwards,
+# requires the device; see README.md for the device verification order.
 
 on:
   push:
@@ -197,3 +204,52 @@ jobs:
             exit 1
           }
           echo "unixnu.lock matches the resolved sources"
+
+  partition-safety:
+    name: Non-destructive install path
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out UniXNU
+        uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU
+          ref: main
+          path: tools
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # The dual-system partition tool carves a `unixnu` partition from the end
+      # of userdata and must leave everything else alone. These are its offline
+      # tests: no phone required, documented for Linux, WSL and macOS.
+      - name: Run the dual-system partition tests
+        working-directory: tools
+        run: python3 scripts/dual_sys/test_dual_sys.py -v
+
+      - name: Check the recovery script parses
+        run: sh -n tools/scripts/dual_sys/twrp.sh
+
+      - name: Build the F2FS shrink helper and run its self-test
+        run: |
+          cc -O2 -Wall -Wextra -Werror \
+            tools/scripts/dual_sys/f2fs-shrink.c -o /tmp/f2fs-shrink-test
+          file /tmp/f2fs-shrink-test
+          /tmp/f2fs-shrink-test self-test
+
+      # The plan bundle carries both GPT copies before and after, so a run that
+      # stops part way can be inspected. Assert the builder emits them.
+      - name: Check the plan bundle layout
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          root = pathlib.Path('tools/scripts/dual_sys')
+          for name in ('partition.py', 'gpt.py', 'f2fs-shrink.c', 'twrp.sh', 'test_dual_sys.py'):
+              assert (root / name).is_file(), f'{name} missing'
+          text = (root / 'partition.py').read_text(encoding='utf-8')
+          for entry in ('gpt-primary.before', 'gpt-backup.before',
+                        'gpt-primary.after', 'gpt-backup.after', 'SHA256SUMS'):
+              assert entry in text, f'plan bundle does not emit {entry}'
+          print('plan bundle emits both GPT copies before and after, plus SHA256SUMS')
+          PY

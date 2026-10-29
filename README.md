@@ -72,6 +72,61 @@ appears there as `kits/nx769j`.
 Copy `local.toml.example` to the ignored `local.toml` for machine-specific
 source overrides.
 
+## Installing alongside Android
+
+Writing the OS images into the `[userdata]` windows destroys Android's `/data`,
+which is its user data partition. Android keeps its system images but no longer
+boots to a usable state. To keep the stock system bootable, install into a
+separate `unixnu` partition instead, using the
+[dual-system partition](https://unixnu.com/porting/dual-system-partition) tool.
+
+That tool shrinks the F2FS `userdata` filesystem and carves `unixnu` from the
+end of the partition. It preserves `userdata`'s start, type, GUID and
+attributes and leaves `metadata`, `super`, `boot` and every other partition
+untouched. The whole procedure runs from userspace: host Python over ADB, with
+the recovery shell doing the writes.
+
+NX769J satisfies the layout requirements that can be checked offline:
+
+| Requirement | NX769J |
+| --- | --- |
+| Filesystem F2FS, 4096-byte blocks | `recovery.fstab` mounts `/data` as f2fs on `userdata` |
+| Compatible TWRP with root ADB | Several NX769J TWRP device trees exist |
+| Kernel supports `F2FS_IOC_RESIZE_FS` | Kernel 6.1.25; validate the recovery kernel on the device |
+| `userdata` is the last occupied partition, free GPT entry present | **Unverified** — run `partition.py inspect` |
+| Encryption is direct userdata or one mapping backed only by userdata | **Unverified** — NX769J has a separate f2fs `metadata` partition |
+
+### Verify the stock system still boots
+
+Do this before writing any image. Back up `userdata` and `metadata` offline
+first; the tool provides no automatic retry or rollback, and restoring the GPT
+does not undo the F2FS relocation.
+
+```sh
+# 1. Back up, then inspect. Read-only; writes nothing to the device.
+python3 scripts/dual_sys/partition.py inspect
+
+# 2. Preview the split. Writes only host files and recovery /tmp.
+python3 scripts/dual_sys/partition.py plan \
+  --size-gib 32 --helper out/dual_sys/f2fs-shrink --output out/dual_sys/preview
+
+# 3. Apply, then restart recovery and verify the new layout.
+python3 scripts/dual_sys/partition.py apply \
+  --size-gib 32 --helper out/dual_sys/f2fs-shrink --output out/dual_sys/applied
+python3 scripts/dual_sys/partition.py verify --plan out/dual_sys/applied/plan.json
+
+# 4. Prove the stock system still boots.
+adb reboot system
+```
+
+Step 4 is the verification that matters: if Android reaches its lock screen,
+the system partitions were never touched. If it does not, stop and have the
+device maintainer assess the captured recovery state before anything else.
+
+`unixnu` stays unformatted after the split and may still hold old `userdata`
+bytes. Before writing an image, confirm the flash command targets `unixnu` and
+not Android's `userdata`.
+
 ## Component selection
 
 `board.toml` lists the complete selection, because arrays replace the inherited
