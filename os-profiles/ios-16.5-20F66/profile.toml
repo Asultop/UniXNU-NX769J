@@ -56,7 +56,12 @@
 ["kernel"]
 
 ["kernel"."prelink"]
-"tool" = "kits/XnuPrelink/emit_prelink.py"
+# A device wrapper rather than kits/XnuPrelink/emit_prelink.py directly: the
+# kit's known-literal-pool catalogue is per kernelcache and the entries shipped
+# with it belong to the iPadOS 17.7.11 image. The wrapper verifies this
+# kernelcache's Libm coefficient table against the image, records it, and runs
+# the kit's own tool unchanged. See scripts/emit-prelink-nx769j.py.
+"tool" = "scripts/emit-prelink-nx769j.py"
 # xnu-8796 links no .unstripped.noctf. Its MakeInc.kernel lists five primary
 # outputs -- .unstripped, the stripped kernel, .dSYM, .link and the static
 # archive -- and the .noctf variant UniXNU's scripts expect is a later XNU
@@ -71,13 +76,28 @@
 # and would fail the pin check.
 "kernelcache_sha256" = "e6fa75598f47b5a9460a60913e2ac8e4cd6cd60eb475bb31da65b68ffbcfdad5"
 "slide" = "-0x1000000"
-# The slid load address of AppleMobileFileIntegrity's early security init in
-# this kernelcache, read from the __PRELINK_INFO dictionary. The iPadOS 17.7.11
-# profile carries 0xfffffff005ab4ae0 for its own kernelcache; the addresses are
-# version bound and must not be copied between profiles. Leave the hook unset to
-# skip the path entirely, which is what the caihong SM8650 port does on a SoC
-# without an Apple PMGR.
-"early_security_init" = "com.apple.driver.AppleMobileFileIntegrity=0xfffffff004e2b640"
+# Unset: this hook has no measured address yet, and the value it wants is not
+# the one scripts/extract-ipsw-pins.py used to emit.
+#
+# The contract is in patches/xnu/xnu-8796.101.5-security-init.patch: OSKext::
+# start reads an _NativePrelinkEarlySecurityInit OSNumber from the kext, adds
+# vm_kernel_slide, checks the result is 4-aligned and inside a read-execute,
+# non-writable segment of that module, and calls it as void(void) before MAC
+# policy lockdown. emit_prelink.py enforces the same shape, so the value is an
+# unslid function address inside the module's __TEXT_EXEC.
+#
+# 0xfffffff004e2b640 is AppleMobileFileIntegrity's _PrelinkExecutableLoadAddr,
+# which is its __TEXT -- the kmod stub, r-- and not executable. Passing it fails
+# with "Early security initializer outside original module code", correctly.
+# The function that actually has to run is inside the module's __TEXT_EXEC at
+# 0xfffffff0056fe000..0xfffffff00571b764, and identifying which one is a
+# reversing task, not a field lookup. Until it is measured, leave this unset and
+# let emit_prelink skip the path: AMFI still starts through its ordinary start
+# routine, but the pre-lockdown call does not happen.
+#
+# The iPadOS 17.7.11 profile carries 0xfffffff005ab4ae0 for its own kernelcache.
+# Those addresses are version bound and must not be copied between profiles.
+# "early_security_init" = "com.apple.driver.AppleMobileFileIntegrity=<unslid __TEXT_EXEC address>"
 # Bundle identifiers kept from this kernelcache. Every entry below is present in
 # the iOS 16.5 kernelcache's __PRELINK_INFO. The iPadOS 17.7.11 list also keeps
 # com.apple.iokit.IOHIDEventDriver, which this kernelcache does not contain.

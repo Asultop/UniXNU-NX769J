@@ -35,9 +35,15 @@ verification and no host verification of anything past the build.
 | --- | --- |
 | Board, component selection, device tree, kernel config | complete |
 | Kernel compiles and links on Linux | **done** |
-| Prelink | blocked — see [`porting.toml`](porting.toml) |
+| Prelink produces `kernel/kernel.macho` | **done** — experimental candidate, not runtime-qualified |
 | UEFI firmware | designed, not built — see [`docs/UEFI-FIRMWARE.md`](docs/UEFI-FIRMWARE.md) |
 | Payload, boot image, boot on hardware | not started |
+
+`./unixnu build kernel` now runs end to end against the iOS 16.5 restore image:
+eleven archive builders, the link, and prelink. The result is an **experimental
+candidate** — `emit_prelink.py` records `instruction_relocation_complete`,
+`abi_qualified`, `loadable` and `runtime_qualified` as false in every plan it
+writes, and those flags have not moved. Nothing here has been observed running.
 
 Every area states its own scope and next step in [`porting.toml`](porting.toml).
 

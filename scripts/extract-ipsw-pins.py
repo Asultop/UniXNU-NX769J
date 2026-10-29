@@ -6,7 +6,7 @@ Fills the fields an OS profile cannot know without the IPSW:
   ipsw.chip_id / ipsw.board_id        BuildManifest BuildIdentities
   ipsw.sha256                         member file hashes
   kernel.prelink.kernelcache_sha256   the decompressed arm64 kernelcache
-  kernel.prelink.early_security_init  slid load address of AppleMobileFileIntegrity
+  kernel.prelink.early_security_init  not emitted: needs a measured __TEXT_EXEC address
   kernel.prelink.roots                kext bundle identifiers in the kernelcache
 
 The kernelcache pipeline mirrors scripts/unixnu/ipsw.py exactly: the IMG4
@@ -261,8 +261,17 @@ def main() -> int:
         by_id.setdefault(entry.get('CFBundleIdentifier'), entry)
     amfi = by_id.get('com.apple.driver.AppleMobileFileIntegrity')
     if amfi:
-        addr = amfi.get('_PrelinkExecutableLoadAddr')
-        print(f'early_security_init = "com.apple.driver.AppleMobileFileIntegrity={addr}"')
+        # Not the value itself: early_security_init wants an unslid void(void)
+        # address inside this module's __TEXT_EXEC, which is a reversing task
+        # rather than a field lookup. _PrelinkExecutableLoadAddr is the __TEXT
+        # kmod stub and fails emit_prelink's "outside original module code"
+        # check. Print the range it has to fall in instead of a plausible wrong
+        # answer.
+        load = amfi.get('_PrelinkExecutableLoadAddr')
+        print(f'# early_security_init: needs an unslid void(void) address inside '
+              f'AppleMobileFileIntegrity __TEXT_EXEC')
+        print(f'#   (its _PrelinkExecutableLoadAddr {load} is the __TEXT kmod stub, not a function; '
+              f'do not use it here)')
     else:
         print('# com.apple.driver.AppleMobileFileIntegrity is not in this kernelcache')
 
