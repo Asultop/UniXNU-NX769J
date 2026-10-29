@@ -1,0 +1,7 @@
+# Board patch paths, one per line in application order.
+#
+# The resolved series is
+#   arch:patches/xnu/series  soc:patches/xnu/series  os:patches/xnu/series  device:patches/xnu/series
+# so this file only carries board-specific XNU patches. Relative paths resolve
+# from this directory. There are none yet: the board currently runs on the
+# ARM64, SM8550-common and iPadOS patch sets alone.

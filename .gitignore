@@ -1,0 +1,11 @@
+# Local overrides and generated output.
+/local.toml
+/build/
+/out/
+
+# Proprietary firmware inputs are staged here, never committed.
+/.cache/
+
+__pycache__/
+*.pyc
+.DS_Store

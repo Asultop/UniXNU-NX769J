@@ -1,0 +1,47 @@
+# Required firmware inputs: relative path | source | SHA-256 | consumer
+#
+# The build tree links to .cache/firmware, so every tree and every rebuild uses
+# these files without copying them into the repository. Populate .cache/firmware
+# from this board's own firmware package and verify each hash before use.
+#
+# Hashes below were computed from the NX769J firmware copies published in
+# DarkestSpawn/device_NX769J at
+# https://github.com/DarkestSpawn/device_NX769J/tree/main/prebuilt/NX769J/vendor/firmware
+# (NX769J Android 14 vendor firmware). Re-verify against your own device
+# package before flashing anything.
+
+# --- Inputs required by the components selected in board.toml -----------------
+# None. ArmDTPlatform, ArmCpu, SoftwareAES, XnuPrelink, DarwinBoot, ShengUfs,
+# VirtioMmioBlock, VerifiedRoot and GopFramebuffer need no proprietary blob: UFS
+# is driven directly, GOP comes from the UEFI firmware and the rest are generic.
+# The IPSW members are pinned by hash in the OS profile.
+
+# --- Inputs required once the remaining areas are implemented ----------------
+
+# Touch controller: Goodix 9916R on NX769J. Needed by the Goodix input driver
+# that replaces the catalog's Novatek NT36532E driver.
+goodix_firmware_9916r.bin | DarkestSpawn/device_NX769J prebuilt/NX769J/vendor/firmware/goodix_firmware_9916r.bin | 5da4216a8c29f526d2167a0e21d0c7d1fa1614fa71b2b4e820dfc0294a25cf2c | input
+
+# Haptics: Awinic AW22xxx driver firmware.
+aw22xxx_fw.bin | DarkestSpawn/device_NX769J prebuilt/NX769J/vendor/firmware/aw22xxx_fw.bin | 38b4d30f6baffeff45474c8d8b95983629b6c1bd80665943ea142ece76053f94 | power
+haptic_ram.bin | DarkestSpawn/device_NX769J prebuilt/NX769J/vendor/firmware/haptic_ram.bin | 8286947193372ba10dc2c67ba5ac963f28da9e8d5f432625e9b014b797db4472 | power
+
+# SAR / proximity: Awinic AW9620x.
+aw9620x_fw_0.bin | DarkestSpawn/device_NX769J prebuilt/NX769J/vendor/firmware/aw9620x_fw_0.bin | 907f0c5a8f67c48e8a83c8d35cf32612799047caca334b35865a31ebf57ad2a3 | input
+aw9620x_reg_0.bin | DarkestSpawn/device_NX769J prebuilt/NX769J/vendor/firmware/aw9620x_reg_0.bin | c3cd1cc9e9636d844fbc7b248c9456ea13fcc5838cfd18ed6f4be03e0b30dff7 | input
+
+# --- Inputs still to be collected --------------------------------------------
+
+# Adreno 750 ZAP shader firmware and the GMU firmware set for
+# qcom,adreno-gmu-750.1. Not collected: no GPU driver is selected yet.
+# zap.mdt / zap.mbn / ... | <device firmware package> | <sha256> | gpu
+
+# WCN7850 (FastConnect 7800) ath12k firmware and board data. Not collected: the
+# catalog Wi-Fi transport does not match this OS profile.
+# amss.bin / m3.bin / board-2.bin / ... | <device firmware package> | <sha256> | network
+
+# The stock firmware DTB consumed by `unixnu bootimg`. Extract it from the
+# device before assembling a boot image:
+#   adb shell "ls -l /dev/block/by-name/vendor_boot"
+#   python3 tools/mk_vendor_boot2.py --extract vendor_boot.img
+# DeviceTree/board.dtb | <device vendor_boot> | <sha256> | firmware

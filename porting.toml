@@ -1,0 +1,219 @@
+schema_version = 1
+
+[device]
+name = "nx769j"
+soc = "SM8650"
+os_profile = "ipados-17.7.11-21H461"
+summary = "nubia RedMagic 9 Pro / 9 Pro+ / 9S Pro / 9S Pro+ (NX769J) on Qualcomm SM8650. The board shares the SM8550 SoC register map and owns its CPU topology, UFS root policy, Goodix touch input and Adreno 750 GPU work. This record states the implementation coverage of each area and the evidence each milestone requires."
+
+[[area]]
+id = "configuration"
+status = "implemented"
+components = ["ArmDTPlatform", "SoftwareAES", "XnuPrelink"]
+paths = ["board.toml", "feeds.toml", "unixnu.lock", "configs/**", ".gitmodules", ".github/**", ".gitignore", ".gitattributes", "local.toml.example"]
+inputs = ["SM8650 register map and CPU topology from mainline sm8650.dtsi.", "iPadOS 17.7.11 build 21H461 OS profile with XNU 10063.141.1.", "UniXNU-sm8550-common revision 23b2049fcd9e30356161def84231334fb55ecca9 as the SoC source.", "Board identity from the NX769J Android 14 vendor firmware and board configuration."]
+configuration = ["board.name = nx769j; board.soc = SM8650; board.soc_source = sm8550; board.os_profile = ipados-17.7.11-21H461; schema_version = 2.", "components.include lists the complete selection; arrays replace the inherited ARM64, SoC and OS arrays.", "kernel.defconfig = nx769j_defconfig; config_fragments apply arch, soc, os in order and the device defconfig last.", "device_tree.source = device:dts/nx769j.dts with include_dirs = [soc:dts].", "Board submodules are not used; every driver comes from the component catalog at its pinned revision."]
+procedure = ["Read https://unixnu.com/porting/device-repository and https://unixnu.com/porting/records.", "Run ./unixnu defconfig nx769j_defconfig -D ../UniXNU-NX769J from the UniXNU checkout.", "Run ./unixnu fetch -D ../UniXNU-NX769J and commit the resulting unixnu.lock.", "Run ./unixnu status --json -D ../UniXNU-NX769J and review the resolved profiles, components, source pins and patch order, then ./unixnu tree -D ../UniXNU-NX769J."]
+findings = ["Tables merge in ARM64, SoC, OS, device order and arrays replace inherited arrays, so the device must list every required component and fragment.", "soc:configs/sm8550.config sets CONFIG_XNU_NATIVE_ADRENO=y. The device defconfig applies last and sets CONFIG_XNU_NATIVE_ADRENO=n because the SM8550 GPU stack targets Adreno 740 while this board has Adreno 750.", "There is no UniXNU-sm8650-common. sm8550-common is usable as the SoC source because the register map of every resource this port drives is identical on both parts: GICD 0x17100000/0x10000, GICR 0x17180000/0x200000, UFS host 0x01d84000/0x3000, UFS PHY 0x01d80000/0x2000, GPU 0x03d00000/0x40000, GMU 0x03d6a000/0x35000 and GPU SMMU 0x03da0000/0x40000. The CPU core names and the Adreno generation do differ and are overridden in the board DTS and defconfig.", "The kernel.prelink block is inherited from the OS profile rather than duplicated, so the board only records the values it actually overrides."]
+completion = ["All source pins resolve; every selected component has a record; status shows the intended overrides and patch order."]
+limits = ["local.toml can select a different source from the published pin; record the effective source in each verification result.", "The SoC source is the SM8550 repository. A dedicated UniXNU-sm8650-common would carry the SM8650 CPU topology and Adreno 750 platform operations instead of board-level overrides."]
+next_action = ["Compare the effective status output whenever a profile, source or component selection changes.", "Extract the SM8650 CPU topology and platform operations into UniXNU-sm8650-common once the board needs GPU power votes."]
+
+[[area.evidence]]
+kind = "source"
+reference = "board.toml"
+result = "Board configuration, component selection, defconfig and patch order described in this section"
+
+[[area.evidence]]
+kind = "source"
+reference = "feeds.toml"
+result = "SoC source URL and reviewed commit pinning the SM8550-common revision"
+
+[[area]]
+id = "firmware"
+status = "planned"
+components = ["DarwinBoot"]
+paths = ["proprietary-files.txt", "scripts/extract-files.py", "scripts/gen-touch-firmware.py", "scripts/collect-device-inputs.sh"]
+inputs = ["uefi-nx769j Mu-Silicium platform package for the Pineapple QRD base board.", "Stock firmware DTB carried in the device vendor_boot image.", "UEFI GOP handoff, PSCI SMC interface and the vendor firmware inventory from proprietary-files.txt.", "Android 14 ABL: boot header version 4, 4096-byte pages, kernel base 0x0."]
+configuration = ["firmware.config = nx769j; firmware.dsc = Platforms/Nubia/nx769jPkg/nx769j.dsc; firmware.fd = Build/nx769jPkg/{target}_CLANGPDB/FV/SILICIUM_UEFI.fd.", "firmware.packages = [{uefi}, {tree}/package, {tree}/drivers/DarwinBoot, {edk2}].", "firmware.defines.DEVICE_MODEL = nx769j.", "[bootimg.image] base = 0x0, pagesize = 4096, header_version = 4 to match BOARD_KERNEL_BASE, BOARD_KERNEL_PAGESIZE and BOARD_BOOTIMG_HEADER_VERSION."]
+procedure = ["Read https://unixnu.com/porting/uefi-firmware and create the uefi-nx769j platform package.", "Include UniXNU, UniXNUPkg, DarwinBoot and, for a Mu-Silicium initrd, UniXNURamDiskDxe, DiskIoDxe and FAT support in the DSC and FDF.", "Include the firmware log exporter from https://unixnu.com/porting/log-capture#firmware-setup so logs can be scanned from the menu during bring-up.", "Run ./unixnu build firmware -D ../UniXNU-NX769J --uefi ../uefi-nx769j and record the firmware commit, output FD and handoff memory map.", "Run ./unixnu bootimg with the firmware DTB and inspect the payload report."]
+findings = ["The firmware DTB is a separate input to boot-image assembly; XNU consumes the ADT generated from the board DTS.", "NX769J boots through UEFI: the board configuration sets TARGET_USES_UEFI := true and the boot image is header version 4, so the ABL rejects a version 0 image.", "The stock bootloader keeps a contiguous-splash region whose address is board specific. sheng declares it as /reserved-memory/splash_region and re-adds it through a [[bootimg.dtb_node]] entry; this board has no sourced address yet, so no entry is declared."]
+completion = ["Firmware image builds, enters UniXNU, publishes the framebuffer and preserves the documented memory reservations."]
+limits = ["The uefi-nx769j platform package does not exist yet; board.toml records its intended DSC and FD paths.", "The firmware DTB and the splash reservation are not collected: both need the device or its vendor_boot image."]
+next_action = ["Create the uefi-nx769j package from the Mu-Silicium template and reach the UniXNU menu with a published framebuffer.", "Run sh scripts/collect-device-inputs.sh and record the firmware DTB and splash reservation."]
+evidence = []
+
+[[area]]
+id = "cpu"
+status = "implemented"
+components = ["ArmCpu"]
+paths = ["package/CpuFreq*", "scripts/*armcpu*"]
+inputs = ["SM8650 CPU topology from mainline sm8650.dtsi: cpu0-1 arm,cortex-a520, cpu2-6 arm,cortex-a720, cpu7 arm,cortex-x4.", "MPIDR affinities 0x0, 0x100, 0x200, 0x300, 0x400, 0x500, 0x600, 0x700.", "GICv3 distributor 0x17100000/0x10000, redistributors 0x17180000/0x200000 with #redistributor-regions = 1 and redistributor-stride 0x40000, ITS at 0x17140000/0x40000.", "19.2 MHz timer. PSCI uses SMC. GIC PPI partitions group cpu0-1, cpu2-6 and cpu7."]
+configuration = ["dts/nx769j.dts includes sm8550.dtsi and replaces each cpuN compatible with the SM8650 core name, keeping the DTSI MPIDR values.", "unixnu,cluster-type = E on cpu0-1 and P on cpu2-7 feeds the ADT scheduler grouping.", "CONFIG_XNU_ARMCPU=y and CONFIG_XNU_NATIVE_ARCH_TIMER=y from the ARM64 common fragment."]
+procedure = ["Compile the board DTS and inspect enabled CPUs, GIC ranges and timer properties in the generated ADT.", "Record per-CPU entry, timer interrupts and inter-processor interrupt delivery at the checkpoints in https://unixnu.com/porting/bring-up."]
+findings = ["The SM8550 DTSI declares three A510 cores followed by A715, A710 and X3 cores. SM8650 instead has two A520 cores first and a single X4 prime core last, so the compatible strings must be replaced per node while the MPIDR layout is unchanged at 0x100 spacing.", "The GIC PPI partitions in sm8650.dtsi confirm the grouping independently of the core names: partition 0 is cpu0-1, partition 1 is cpu2-6 and partition 2 is cpu7.", "CPU affinity values are hardware identifiers; enabled CPU count and MPIDR affinities must be checked together."]
+completion = ["Every enabled CPU reaches its entry checkpoint and timer/IPI handling works on each enabled CPU."]
+limits = ["CPU frequency and idle policy are board inputs and are not implemented; no CpuFreq board service exists yet.", "Per-CPU entry and interrupt delivery are not yet observed on this board."]
+next_action = ["Record per-CPU entry and interrupt observations once the firmware reaches the kernel handoff."]
+
+[[area.evidence]]
+kind = "source"
+reference = "dts/nx769j.dts"
+result = "SM8650 CPU topology, MPIDR affinities, cluster types and GIC handoff described in this section"
+
+[[area]]
+id = "memory"
+status = "implemented"
+components = []
+paths = ["dts/**", "package/*Smmu*", "package/*Memory*", "scripts/*smmu*", "scripts/*memory*"]
+inputs = ["ARM64 Qualcomm DRAM base 0x80000000.", "Handoff window 0x80000000 bytes at 0x80000000, matching payload.dram_size.", "Apps SMMU at 0x15000000/0x100000 and GPU SMMU at 0x03da0000/0x40000, both qcom,sm8650-smmu-500.", "UFS host and PHY register ranges shared with SM8550."]
+configuration = ["device_tree.source = device:dts/nx769j.dts; include_dirs = [soc:dts].", "memory@80000000 declares one contiguous DRAM range; payload.adt.owned_memory_size and payload.dram_size are both 0x80000000.", "The reserved-memory node is declared empty: no board reservation is sourced yet."]
+procedure = ["Compare firmware RAM ranges, reserved regions, DTS ranges and ADT memory-map entries.", "Check DMA buffers against controller address width, cache policy and SMMU mapping before submitting work.", "Run sh scripts/collect-device-inputs.sh to capture /proc/iomem and the firmware memory map."]
+findings = ["The memory node describes the contiguous DRAM range handed to XNU, not the installed RAM. NX769J ships 8 to 24 GiB depending on SKU; 0x80000000 is the handoff window the payload requests and is the value the verified ports on this SoC family use.", "Physical register translation and CPU virtual mappings have different purposes. Preserve physical resource ranges in hardware descriptions.", "The Apps SMMU and GPU SMMU register ranges are identical between SM8550 and SM8650, so the shared SMMU kit is applicable to this board.", "An exported register below 16 MiB is an error: the common generator reads the arm-io window base as the SoC base and requires it to be non-zero."]
+completion = ["All handoff regions are accounted for and each enabled DMA engine accesses its allocated range with the documented cache policy."]
+limits = ["Board reservations are not declared. The contiguous-splash region and the removed regions come from the firmware memory map and are not in any public NX769J source.", "The installed DRAM size is SKU dependent and is not asserted here; the handoff window is the declared value."]
+next_action = ["Run sh scripts/collect-device-inputs.sh and add each reserved region to the reserved-memory node and to a [[bootimg.dtb_node]] entry where the bootloader requires it."]
+
+[[area.evidence]]
+kind = "source"
+reference = "dts/nx769j.dts"
+result = "DRAM handoff window and reserved-memory node state described in this section"
+
+[[area]]
+id = "storage"
+status = "implemented"
+components = ["ShengUfs", "VirtioMmioBlock", "VerifiedRoot"]
+paths = ["drivers/ShengUfs", "scripts/*ufs*", "scripts/*storage*", "scripts/*userdata*", "scripts/*root*"]
+inputs = ["UFS host 0x01d84000/0x3000 (qcom,sm8650-ufshc, jedec,ufs-2.0, SPI 265) and UFS PHY 0x01d80000/0x2000 (qcom,sm8650-qmp-ufs-phy).", "GCC AXI, AHB, UniPro, symbol and PHY auxiliary branches; power domains and firmware link state.", "Apps SMMU at 0x15000000, UFS stream assignment, context-bank ownership, DMA width and cache maintenance.", "NX769J is an A/B device with dynamic partitions; userdata is a f2fs volume at /dev/block/bootdevice/by-name/userdata and the super partition is 9126805504 bytes."]
+configuration = ["Select ShengUfs, VirtioMmioBlock and VerifiedRoot; CONFIG_XNU_NATIVE_UFS=y and CONFIG_XNU_NATIVE_VIRTIO_BLOCK=y.", "dts/nx769j.dts sets &ufs and &ufsphy status = okay.", "userdata windows are not declared yet: board.toml [userdata] is absent until the live GPT extents are read."]
+procedure = ["Read https://unixnu.com/porting/ufs with this storage record.", "Inspect clock enables, power state, HCE/HCS, link state, request-list base and SMMU mappings before changing controller ownership.", "Validate SCSI capacity and GPT reads, then publish the OS and SystemOS windows within the userdata range.", "Run sh scripts/collect-device-inputs.sh for the userdata extents, then add board.toml [userdata] with first_lba, last_lba and lba_bytes.", "Verify persistent Data writes on the documented Data allocation with a recovery image available."]
+findings = ["UFS host and PHY addresses are identical between SM8550 and SM8650, and the compatible differs only in the SoC name (qcom,sm8550-ufshc versus qcom,sm8650-ufshc). The shared ShengUfs controller access applies to this board; the board owns its userdata policy.", "An idle AHB branch may report CLK_OFF with hardware gating enabled. Check enable and gating bits together.", "SMMU bypass still has address-width constraints. Validate every DMA range and context-bank assignment.", "recovery.fstab mounts /data as f2fs on userdata, so the persistent Data path must handle f2fs rather than the ext4 layout assumed by some board configurations."]
+completion = ["Host: register, clock, link and SMMU facts match the board inventory.", "Reads: SCSI capacity, GPT and known blocks are correct; OS/SystemOS windows stay within userdata.", "Root: the configured volume mounts and launchd starts. Persistence: writes survive reboot within the allocated Data region."]
+limits = ["board.toml [userdata] is absent because first_lba, last_lba and lba_bytes are unfakeable: a wrong range overwrites an unrelated partition.", "payload.adt.root_match_volume_uuid is still REQUIRED_ROOT_VOLUME_UUID and must be read from the installed OS image.", "ShengUfs contains sheng Data and log policy that is board specific and is not reused here."]
+next_action = ["Read the userdata GPT extents and add board.toml [userdata] before any image is written to the device.", "Read the OS window APFS volume UUID and set payload.adt.root_match_volume_uuid."]
+
+[[area.evidence]]
+kind = "source"
+reference = "dts/nx769j.dts"
+result = "UFS host and PHY register ranges, node enables and the A/B userdata layout described in this section"
+
+[[area]]
+id = "display"
+status = "implemented"
+components = ["GopFramebuffer"]
+paths = ["package/*Display*", "package/*Framebuffer*", "package/*Backlight*", "package/AppleARMBacklight.cpp", "package/GeniI2c*", "scripts/*display*", "scripts/*gop*", "scripts/*framebuffer*"]
+inputs = ["UEFI GOP framebuffer published by uefi-nx769j, its stride, pixel format and handoff.", "NX769J panel: 1116x2480 at 480 dpi (TARGET_SCREEN_DENSITY := 480).", "MDSS and DPU at qcom,sm8650-mdss / qcom,sm8650-dpu with two qcom,sm8650-dsi-ctrl and qcom,sm8650-dsi-phy-4nm instances.", "Backlight controls through the board panel driver."]
+configuration = ["Select GopFramebuffer; CONFIG_XNU_NATIVE_LEGACY_DISPLAY=y.", "Display presentation comes from the firmware framebuffer, so the board does not configure a scanout pipe yet."]
+procedure = ["Verify GOP address, dimensions, stride and pixel layout before enabling presentation.", "Build the late display archive with the selected OS ABI records, then check display publication and frame presentation.", "Record frame timing and pixel format at the checkpoints in https://unixnu.com/porting/bring-up."]
+findings = ["The display source and ABI binding are selected independently of the physical panel configuration; the GOP path presents whatever geometry the firmware publishes.", "The panel geometry is board data from the NX769J board configuration and is recorded for the record even though the GOP path does not consume it yet.", "SM8650 carries two DSI controllers and a DSI PHY per controller; a native scanout path would bind to those rather than to the SM8550 display nodes."]
+completion = ["A known frame appears with correct geometry and colors, then userland presentation and backlight controls work."]
+limits = ["No presentation result exists yet; the firmware must publish a GOP framebuffer before the display area can be verified.", "Panel timing, backlight and DSI bring-up are unimplemented. GopFramebuffer presents through the firmware and does not drive the panel."]
+next_action = ["Capture the GOP geometry from the firmware and record a known frame with correct geometry and colors."]
+
+[[area.evidence]]
+kind = "source"
+reference = "configs/nx769j_defconfig"
+result = "GopFramebuffer selection and the native legacy display flag described in this section"
+
+[[area]]
+id = "input"
+status = "planned"
+components = []
+paths = ["drivers/ShengHidInput", "drivers/ShengNovatekTouch", "package/*Touch*", "package/*Button*", "scripts/*touch*", "scripts/*hid*"]
+inputs = ["NX769J touch controller is a Goodix 9916R. The device firmware ships goodix_firmware_9916r.bin.", "The catalog input stack is ShengNovatekTouch, written for the Novatek NT36532E on sheng, with ShengHidInput publishing IOHIDDevice reports.", "Buttons and the Awinic AW22xxx haptics driver, with AW9620x SAR sensing."]
+configuration = ["No input component is selected. board.toml components.include deliberately omits ShengHidInput, ShengNovatekTouch and QcomGeniSpi.", "Touch firmware paths and hashes are recorded in proprietary-files.txt for the future driver."]
+procedure = ["Read https://unixnu.com/porting/input and identify the touch bus, sensor protocol, pins, interrupts and firmware interface.", "Implement a Goodix 9916R driver against the catalog input interface, or adapt ShengNovatekTouch to the Goodix protocol.", "Map contacts to the display, confirm stable contact IDs across simultaneous touches and confirm release events."]
+findings = ["The Novatek driver's sensor protocol does not match the Goodix 9916R on this board, so reusing it would require replacing the transport and the report parser rather than a configuration change.", "ShengHidInput publishes IOHIDDevice reports from a board touch event source, so the HID layer is reusable once a Goodix event source exists."]
+completion = ["Touches map to the display, simultaneous contacts keep stable IDs, release events arrive, and buttons produce expected HID reports."]
+limits = ["No input driver exists for this board. Contact IDs, coordinate mapping and the interrupt wiring are unknown.", "Haptics and SAR sensing are out of scope for the first input milestone."]
+next_action = ["Determine the touch bus and interrupt from the stock device tree, then implement a Goodix 9916R event source behind the catalog HID interface."]
+evidence = []
+
+[[area]]
+id = "gpu"
+status = "planned"
+components = []
+paths = ["package/*Gpu*", "package/*Gmu*", "package/*Adreno*", "scripts/*adreno*", "scripts/*gpu*", "scripts/*metal*", "scripts/*turnip*", "scripts/*air*"]
+inputs = ["Adreno 750, compatible qcom,adreno-43051401 at 0x03d00000/0x40000 with SPI 300.", "GMU qcom,adreno-gmu-750.1 at 0x03d6a000/0x35000 with rscc and gmu_pdc ranges, SPI 304 and 305 for hfi and gmu.", "GPU SMMU qcom,sm8650-smmu-500 at 0x03da0000/0x40000 with stream assignments 0 and 1 on the GPU and 5 on the GMU.", "ZAP shader firmware and GMU firmware for the Adreno 750 generation."]
+configuration = ["No GPU component is selected. board.toml components.include omits Adreno740, AdrenoMetal, Sm8550Platform, AdrenoPM4, AdrenoFirmware and ArmSmmu4K.", "CONFIG_XNU_NATIVE_ADRENO=n overrides the y set by soc:configs/sm8550.config.", "dts/nx769j.dts leaves &gpu, &gmu and &gpu_smmu disabled."]
+procedure = ["Read https://unixnu.com/porting/gpu and https://unixnu.com/porting/drivers.", "Qualify the catalog GPU stack against Adreno 750, or write a driver for this generation, then select the components and enable the DTS nodes together.", "Verify submissions, mapping and fence handling, render a known image and present it through the selected Metal client."]
+findings = ["The catalog Adreno740 driver declares hardware Adreno 740 and SM8550 and is verified only on sheng. This board has Adreno 750, whose GMU reports qcom,adreno-gmu-750.1 where SM8550 reports qcom,adreno-gmu-740.1.", "GPU, GMU and GPU SMMU register ranges are identical between SM8550 and SM8650, so the SMMU and platform kits have matching register inputs; the firmware protocol and the PM4 packet generation are the parts that need qualification for this generation.", "sm8650.dtsi gives the GPU as qcom,adreno-43051401 while sm8550.dtsi gives qcom,adreno-43050a01; the chip ID is what distinguishes the two parts to the driver."]
+completion = ["GPU submissions complete, mapping/fence handling is correct, a known image renders, and the selected Metal client presents it."]
+limits = ["No GPU driver is qualified for Adreno 750 and no ZAP or GMU firmware is collected.", "GPU power votes, DCVS and the display scanout hand-off are unimplemented."]
+next_action = ["Collect the Adreno 750 ZAP and GMU firmware from the device firmware package and qualify the HFI startup sequence against qcom,adreno-gmu-750.1."]
+evidence = []
+
+[[area]]
+id = "network"
+status = "planned"
+components = []
+paths = ["drivers/Ath12kWifi", "package/*Wifi*", "package/MhiBoot*", "scripts/*wifi*", "scripts/*mhi*"]
+inputs = ["WCN7850 (FastConnect 7800) reached over PCIe, with ath12k firmware and board data.", "The catalog Ath12kWifi transport declares hardware qcc2072, qcn9274 and wcn7850 build inputs and board dependencies on PCI configuration, BAR, MSI and DMA operations.", "Ath12kWifi declares os_abi 'nw_abi platform interface', which is not the ipados-17.7.11-21H461 ABI."]
+configuration = ["No network component is selected. board.toml components.include omits Ath12kWifi."]
+procedure = ["Read https://unixnu.com/porting/network and identify the bus, firmware, interrupts, DMA and OS interface.", "Qualify the ath12k transport against this OS profile's ABI, then select the component.", "Verify scanning, association, address configuration and sustained receive and transmit traffic."]
+findings = ["Ath12kWifi is the only Wi-Fi transport in the catalog and its hardware list includes wcn7850, which is the chip on this board, but its declared os_abi does not match the selected OS profile. Selecting it would claim an ABI match that the catalog does not state.", "PCI configuration, BAR, MSI and DMA operations are board dependencies that this board has not implemented."]
+completion = ["Scanning, association, address configuration and sustained receive/transmit traffic pass with the selected firmware."]
+limits = ["No network driver is selected and no ath12k firmware is collected.", "PCIe enumeration and MSI delivery are unimplemented on this board."]
+next_action = ["Establish the OS ABI that the ath12k transport requires, then either adapt it to ipados-17.7.11-21H461 or record the gap in the component catalog."]
+evidence = []
+
+[[area]]
+id = "audio"
+status = "planned"
+components = []
+paths = ["package/*Adsp*", "package/*Audio*", "package/*Gpr*", "package/QcomGlink*", "package/QcomMdt*", "package/QcomSmem*", "package/QcomSmp2p*", "scripts/*adsp*", "scripts/*audio*", "scripts/*gpr*"]
+inputs = ["SM8650 LPASS: qcom,sm8650-adsp-pas, qcom,gpr, qcom,q6apm, qcom,q6prm with lpass rx, tx, wsa and va macros over soundwire v2.0.0.", "ADSP firmware and its firmware services, loaded through the PAS loader.", "Board audio routes and the codec configuration shipped in the NX769J vendor firmware."]
+configuration = ["No audio component is selected. board.toml components.include omits the ADSP and audio IPC drivers."]
+procedure = ["Read https://unixnu.com/porting/power and the audio section of https://unixnu.com/porting/drivers.", "Bring up the ADSP with its firmware, establish the GPR/IPC router transport and publish the audio routes.", "Verify each declared route carries the selected audio format through playback or capture."]
+findings = ["The ADSP is reached through the PAS loader and the GPR transport, so audio depends on firmware services and IPC routing before any codec work.", "The audio server keys its routing database and MediaExperience its per-board tables on the board name in the ADT, so the board name must be fixed before audio routes are qualified."]
+completion = ["Each declared route carries the selected audio format through playback or capture and handles start/stop correctly."]
+limits = ["ADSP firmware, IPC transport and codec routing are all unimplemented on this board."]
+next_action = ["Record the ADSP firmware revision and the IPC transport entry points from the vendor firmware before implementing the transport."]
+evidence = []
+
+[[area]]
+id = "power"
+status = "planned"
+components = []
+paths = ["package/*Battery*", "package/*Battmgr*", "package/*Power*", "package/*PlatformPower*", "package/QcomQmp*", "package/QcomRpmh*", "package/QcomScm.h", "scripts/*power*", "scripts/*battery*", "scripts/*pmgr*"]
+inputs = ["PMIC regulators over SPMI with RPMh (qcom,rpmh-rsc, qcom,sm8650-rpmhpd, qcom,sm8650-rpmh-clk, qcom,bcm-voter).", "qcom,aoss-qmp and rpmh-stats for low power state transitions.", "NX769J battery and charging units, and the Awinic AW22xxx haptics driver."]
+configuration = ["No power component is selected. board.toml components.include omits the PMGR and power drivers.", "CONFIG_XNU_SHENG_PMGR is not set: the sheng PMGR driver is board specific and SM8650 has no Apple PMGR block."]
+procedure = ["Read the power section of https://unixnu.com/porting/drivers.", "Record regulator ownership, clock parents and the firmware ownership boundary, then implement the power manager and battery units.", "Verify declared power controls and battery readings against observations and exercise each claimed sleep and resume transition."]
+findings = ["The SoC exposes RPMh and AOSS rather than an Apple PMGR block. The caihong SM8650 port reports that the AMFI early security init path panics with 'AMFI: No PMGR?' on this SoC family for that reason.", "SM8550 and SM8650 both expose the PMGR patch surface that UniXNU-sm8550-common patches, which is why the shared SoC source is usable here as well."]
+completion = ["Declared power controls and battery readings match observations; each claimed sleep/resume transition restores its dependent peripherals."]
+limits = ["Regulator ownership, battery units and sleep transitions are unimplemented. No power data is sourced for this board."]
+next_action = ["Record the PMIC regulator inventory and the firmware ownership boundary from the vendor device tree."]
+evidence = []
+
+[[area]]
+id = "packaging"
+status = "implemented"
+components = ["XnuPrelink"]
+paths = ["scripts/*payload*", "scripts/*image*", "scripts/*flash*", "patches/**", "package/Kit.toml", "package/**"]
+inputs = ["XNU 10063.141.1 at revision d8b80295118ef25ac3a784134bcf95cd8e88109f with the iPadOS 17.7.11 prelink ABI.", "IPSW iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw with pinned member hashes.", "Android 14 boot image format: header version 4, 4096-byte pages, kernel base 0x0, LZ4 ramdisk."]
+configuration = ["kernel.prelink is inherited from the OS profile: tool kits/XnuPrelink/emit_prelink.py, slide -0x1000000 and the pinned kernelcache_sha256.", "kernel.archives run in order before the kernel link and end with the selected component build entries.", "patch_series resolves arch, soc, os, device in order; patches/xnu/series is empty and carries no board patch yet.", "[bootimg.image] base = 0x0, pagesize = 4096, header_version = 4.", "package/unixnu.toml defines the payload menu with a single xnu entry."]
+procedure = ["Read https://unixnu.com/concepts/prelink, https://unixnu.com/concepts/payload and https://unixnu.com/building.", "Build kernel, package, firmware and payload in order and check each output before proceeding.", "After changing boot arguments, rebuild both the payload and the boot image as described in https://unixnu.com/xnu/boot-arguments#apply-arguments.", "Run python3 scripts/porting-record.py check --device . from the UniXNU checkout before publishing."]
+findings = ["The boot image is header version 4 because the Android 14 ABL on this board rejects a version 0 image; BOARD_BOOTIMG_HEADER_VERSION is 4 in the NX769J board configuration.", "The prelink block is inherited from the OS profile so the board does not maintain a second copy of the kernelcache pin and the root list.", "The caihong SM8650 port omits prelink early_security_init because running AMFI early security init on a SoC without an Apple PMGR panics with 'AMFI: No PMGR?'. This board currently inherits the OS profile value, which sets it; treat that as an open risk for the first kernel boot and record the observed behaviour."]
+completion = ["Kernel and prelink succeed, payload contains all declared inputs, and the boot image matches the bootloader format and size limit."]
+limits = ["payload.adt.root_match_volume_uuid is still REQUIRED_ROOT_VOLUME_UUID, so the root match input is incomplete.", "No image has been assembled for this board; the prelink ABI inputs are the shared OS profile ones."]
+next_action = ["Assemble a boot image from the resolved tree and record the prelink output, payload report and boot image header values."]
+
+[[area.evidence]]
+kind = "source"
+reference = "package/unixnu.toml"
+result = "Payload menu and boot entry definition for the assembled image"
+
+[[area]]
+id = "diagnostics"
+status = "planned"
+components = []
+paths = ["scripts/check-*", "scripts/probe-*", "scripts/audit-*", "scripts/read-*", "scripts/prepare-*", "scripts/data/**", "package/tests/**", "package/*Tests*", "package/*Diagnostic*", "package/*Probe*", "package/Boot*", "package/linux-log/**"]
+inputs = ["Firmware log exporter and QR log export from https://unixnu.com/porting/log-capture#firmware-setup.", "Serial console over kernel argument serial=3.", "The NX769J device firmware revisions: baseband 5.0.c3-00030-LANAI_GEN_PACK-1.46586.20 and trustzone TZ.XF.5.0-07512.2-LANAIAAAAANAZT-1.46586.1."]
+configuration = ["kernel_args are '-v serial=3'; payload.panic_screen = true and payload.timeout = 3.", "scripts/collect-device-inputs.sh gathers the board inputs that no public source provides."]
+procedure = ["Read https://unixnu.com/porting/log-capture and https://unixnu.com/porting/bring-up.", "Set up QR log export during firmware integration and save the firmware log before the kernel handoff.", "Record each command, revision, output and result, and assign each area its completion level from https://unixnu.com/porting/records#completion-levels."]
+findings = ["Each claimed milestone needs a reproducible command, a matching source and image revision, and an accessible result. Store large logs as linked release or CI artifacts.", "The firmware revisions identify a verification result on this device, so they belong in every device evidence entry once one exists.", "scripts/collect-device-inputs.sh produces the four board inputs that are still missing and is the concrete next step for the memory, storage and firmware areas."]
+completion = ["Each claimed milestone has a reproducible command, a matching source/image revision and an accessible result."]
+limits = ["No device or host verification exists for this board yet, so all evidence is source evidence.", "Log capture and recovery commands are not set up because the firmware is not built."]
+next_action = ["Set up QR log export in the uefi-nx769j firmware and capture the firmware log before the first kernel handoff."]
+evidence = []
+

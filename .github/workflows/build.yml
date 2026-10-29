@@ -1,0 +1,169 @@
+name: Build
+
+# Build tests for the NX769J device repository.
+#
+#   validate     repository structure, TOML, pins, defconfig, and the UniXNU
+#                porting-record checker against the real component catalog
+#   device-tree  compiles dts/nx769j.dts against the pinned SoC DTSI with dtc
+#   resolve      runs the real UniXNU build driver: defconfig merges the
+#                ordered profile fragments and status reports the resolved
+#                profiles, components, source pins and patch order
+#
+# Assembling kernel, firmware, payload and boot images needs the uefi-nx769j
+# platform package, the target IPSW and an Xcode host. None of those exist for
+# this board yet; see porting.toml for the firmware and packaging areas.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate configuration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the device repository
+        uses: actions/checkout@v4
+        with:
+          path: device
+
+      - name: Check out UniXNU for the component catalog
+        uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU
+          ref: main
+          path: tools
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Repository structure
+        env:
+          UNIXNU_COMPONENTS: ${{ github.workspace }}/tools/components.toml
+        run: python3 device/scripts/check-repository.py device
+
+      - name: Porting record
+        run: python3 tools/scripts/porting-record.py check --device device
+
+  device-tree:
+    name: Compile the board device tree
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the device repository
+        uses: actions/checkout@v4
+        with:
+          path: device
+
+      - name: Check out the pinned SoC source
+        uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU-sm8550-common
+          ref: 23b2049fcd9e30356161def84231334fb55ecca9
+          path: soc
+
+      - name: Install dtc
+        run: sudo apt-get update && sudo apt-get install -y device-tree-compiler
+
+      - name: Compile dts/nx769j.dts
+        run: |
+          dtc -I dts -O dtb -i soc/dts -o nx769j.dtb device/dts/nx769j.dts
+          echo "device tree bytes: $(wc -c < nx769j.dtb)"
+
+      - name: Inspect the compiled tree
+        run: |
+          dtc -I dtb -O dts nx769j.dtb > nx769j.roundtrip.dts
+          echo "-- root --"
+          grep -E '^\s+(model|compatible) = ' nx769j.roundtrip.dts | head
+          echo "-- CPUs --"
+          grep -E 'compatible = "(arm,cortex|qcom,adreno)' nx769j.roundtrip.dts | sort | uniq -c
+          echo "-- cluster types --"
+          grep -c 'unixnu,cluster-type' nx769j.roundtrip.dts
+          echo "-- memory --"
+          grep -A2 'device_type = "memory"' nx769j.roundtrip.dts
+          echo "-- enabled peripherals --"
+          grep -B6 'status = "okay"' nx769j.roundtrip.dts | grep -E '^\s+[a-z_]+:' | sort -u
+
+      - name: Check the CPU topology
+        run: |
+          test "$(grep -c 'compatible = "arm,cortex-a520"' nx769j.roundtrip.dts)" = "2"
+          test "$(grep -c 'compatible = "arm,cortex-a720"' nx769j.roundtrip.dts)" = "5"
+          test "$(grep -c 'compatible = "arm,cortex-x4"' nx769j.roundtrip.dts)" = "1"
+          test "$(grep -c 'unixnu,cluster-type' nx769j.roundtrip.dts)" = "8"
+
+  resolve:
+    name: Resolve the build tree
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the device repository
+        uses: actions/checkout@v4
+        with:
+          path: UniXNU-NX769J
+
+      - name: Check out UniXNU
+        uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU
+          ref: main
+          path: UniXNU
+
+      - name: Check out the pinned SoC source
+        uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU-sm8550-common
+          ref: 23b2049fcd9e30356161def84231334fb55ecca9
+          path: UniXNU-sm8550-common
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Select the device configuration
+        working-directory: UniXNU
+        run: |
+          chmod +x unixnu
+          ./unixnu defconfig nx769j_defconfig \
+            -D ../UniXNU-NX769J \
+            --local-module soc:sm8550=../UniXNU-sm8550-common
+
+      - name: Report the resolved configuration
+        working-directory: UniXNU
+        run: |
+          ./unixnu status --json \
+            -D ../UniXNU-NX769J \
+            --local-module soc:sm8550=../UniXNU-sm8550-common > status.json
+          python3 - <<'PY'
+          import json
+          status = json.load(open('status.json'))
+          print('device      :', status.get('device'), status.get('name'))
+          print('output      :', status.get('output'))
+          print('configured  :', status.get('configured'))
+          print('profiles    :', status.get('profiles'))
+          print('patch order :', status.get('patch_order'))
+          board = status.get('board') or {}
+          print('board       :', {k: board.get(k) for k in ('name', 'soc', 'soc_source', 'os_profile', 'kit')})
+          components = status.get('components') or {}
+          print('components  :', components if isinstance(components, list) else sorted(components))
+          PY
+
+      - name: Check the merged kernel configuration
+        run: |
+          config=$(find UniXNU/out -name '.config' | head -1)
+          test -n "$config"
+          echo "merged config: $config"
+          grep -E '^XNU_(ARM_DT_PLATFORM|ARMCPU|NATIVE_UFS|NATIVE_VIRTIO_BLOCK|NATIVE_LEGACY_DISPLAY|NATIVE_ADRENO|CRYPTO_BOOTSTRAP)=' "$config"
+          grep -qx 'XNU_NATIVE_UFS=1' "$config"
+          grep -qx 'XNU_NATIVE_VIRTIO_BLOCK=1' "$config"
+          grep -qx 'XNU_NATIVE_LEGACY_DISPLAY=1' "$config"
+          grep -qx 'XNU_NATIVE_ADRENO=0' "$config"

@@ -1,0 +1,143 @@
+# UniXNU board description for the nubia RedMagic 9 series (NX769J, SM8650).
+#
+# NX769J covers RedMagic 9 Pro / 9 Pro+ and RedMagic 9S Pro / 9S Pro+, the ZTE
+# nubia gaming phones built on Qualcomm "pineapple" (Snapdragon 8 Gen 3).
+#
+# Hardware values are taken from public NX769J sources and from the mainline
+# SM8650 SoC description. See porting.toml for the source of each value and for
+# the inputs that still require a measurement on the device.
+#
+#   SoC register map and CPU topology : u-boot/u-boot dts/upstream/src/arm64/qcom/sm8650.dtsi
+#   Board identity and boot format    : Klozz/nubia_nx769j_dump, Ling0925/android_device_nubia_NX769J
+#   Touch and peripheral firmware     : DarkestSpawn/device_NX769J
+
+schema_version = 2
+
+[board]
+name = "nx769j"
+soc = "SM8650"
+# There is no UniXNU-sm8650-common yet. sm8550-common is pinned because its SoC
+# register map matches SM8650 for every resource this port uses: GIC distributor
+# 0x17100000 and redistributors 0x17180000, UFS host 0x1d84000/0x3000, UFS PHY
+# 0x1d80000/0x2000, GPU 0x3d00000, GMU 0x3d6a000 and GPU SMMU 0x3da0000. The CPU
+# compatible strings and the Adreno generation do differ and are overridden in
+# dts/nx769j.dts and configs/nx769j_defconfig.
+soc_source = "sm8550"
+os_profile = "ipados-17.7.11-21H461"
+description = "nubia RedMagic 9 Pro / 9 Pro+ / 9S Pro / 9S Pro+ (NX769J)"
+kit = "nx769j"
+
+[components]
+# Arrays replace the inherited arrays from the ARM64, SoC and OS profiles, so
+# this list is the complete selection. Deliberately omitted:
+#   Adreno740, AdrenoMetal, Sm8550Platform, AdrenoPM4, AdrenoFirmware,
+#   ArmSmmu4K  - the catalog GPU stack targets Adreno 740 on SM8550. NX769J has
+#                Adreno 750 ("qcom,adreno-43051401", "qcom,adreno-gmu-750.1").
+#   ShengHidInput, ShengNovatekTouch, QcomGeniSpi - the touch driver is for the
+#                Novatek NT36532E. NX769J uses a Goodix 9916R.
+#   Ath12kWifi   - declares os_abi "nw_abi platform interface", which does not
+#                match ipados-17.7.11-21H461.
+include = [
+  "ArmDTPlatform",
+  "ArmCpu",
+  "SoftwareAES",
+  "XnuPrelink",
+  "DarwinBoot",
+  "ShengUfs",
+  "VirtioMmioBlock",
+  "VerifiedRoot",
+  "GopFramebuffer",
+]
+
+[kernel]
+defconfig = "nx769j_defconfig"
+# Archive builders run in order before the kernel link. component:<ID> runs the
+# component's own build entry from the catalog.
+archives = [
+  "build-corecrypto-14.py",
+  "build-corecrypto-14.py --namespace",
+  "component:ArmDTPlatform",
+  "component:ArmCpu",
+  "component:SoftwareAES",
+  "build-software-aes-bindings.py",
+  "build-mockfs-fixture.py",
+  "build-libpthread-kernel.py",
+  "component:ShengUfs",
+  "component:VirtioMmioBlock",
+  "build-virtio-mmio-bindings.py --component VirtioMmioBlock",
+]
+config_fragments = ["arch:configs/common.config", "soc:configs/sm8550.config", "os:configs/ipados.config"]
+patch_series = ["arch:patches/xnu/series", "soc:patches/xnu/series", "os:patches/xnu/series", "device:patches/xnu/series"]
+
+# kernel.prelink is inherited from profiles/os/ipados-17.7.11-21H461/profile.toml:
+# tool, kernel path, kernelcache_sha256, slide, early_security_init and roots.
+# Only board-specific overrides belong here. Note that the caihong SM8650 port
+# reports "AMFI: No PMGR?" panics from early_security_init on a SoC without an
+# Apple PMGR block; see the packaging area of porting.toml before enabling it.
+
+[ipsw]
+# The restored image is an iPad Pro 12.9-inch (2nd generation) restore image.
+# The ADT forges the platform identity, so the IPSW model does not describe the
+# phone. Pinned hashes are in the OS profile.
+url = "https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw"
+product = "iPad7,1"
+version = "17.7.11"
+build = "21H461"
+device_class = "j120ap"
+chip_id = 32785
+board_id = 12
+fetch = ["KernelCache", "DeviceTree", "StaticTrustCache", "Cryptex1,SystemTrustCache"]
+
+# [userdata] is intentionally absent. first_lba and last_lba are the extents of
+# the GPT entry named "userdata" and a wrong range overwrites an unrelated
+# partition. They must be read from the live GPT before this table is added:
+#   adb shell "sgdisk --print /dev/block/sda"
+# The same applies to [[bootimg.dtb_node]] splash reservation and to
+# payload.adt.root_match_volume_uuid. All three are recorded in porting.toml.
+
+[firmware]
+# Produced by the uefi-nx769j Mu-Silicium platform package.
+config = "nx769j"
+dsc = "Platforms/Nubia/nx769jPkg/nx769j.dsc"
+fd = "Build/nx769jPkg/{target}_CLANGPDB/FV/SILICIUM_UEFI.fd"
+packages = ["{uefi}", "{tree}/package", "{tree}/drivers/DarwinBoot", "{edk2}"]
+
+[firmware.defines]
+DEVICE_MODEL = "nx769j"
+
+# Android 14 on this board rejects boot images below header version 4
+# (BOARD_BOOTIMG_HEADER_VERSION := 4) and uses 4096-byte pages with kernel base
+# 0x0 (BOARD_KERNEL_BASE := 0x00000000).
+[bootimg.image]
+base = 0x0
+pagesize = 4096
+header_version = 4
+
+[payload]
+volume = "NX769JESP"
+size_mib = 208
+loader = "firmware"
+title = "UniXNU"
+# Handoff window passed to the ADT tool, not the installed DRAM size.
+dram_size = "0x80000000"
+panic_screen = true
+timeout = 3
+kernel_args = ["-v", "serial=3"]
+
+[payload.adt]
+chip_id = "207"
+owned_memory_size = "0x80000000"
+# The APFS volume UUID inside the OS window. The UFS block class publishes the
+# window, the partition scheme publishes the volume and XNU matches it. Read it
+# from the installed OS image before the first boot:
+#   diskutil info <the OS window's APFS volume> | grep "Volume UUID"
+root_match_volume_uuid = "REQUIRED_ROOT_VOLUME_UUID"
+cpu_regs = "0"
+psci_method = "smc"
+packed_data_ramdisk = true
+ipad_identity = true
+unique_chip_id = "required"
+
+[device_tree]
+source = "device:dts/nx769j.dts"
+include_dirs = ["soc:dts"]

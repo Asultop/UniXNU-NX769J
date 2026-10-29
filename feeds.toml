@@ -1,0 +1,12 @@
+# Source pins for this device. `unixnu fetch` resolves these and writes the
+# effective revisions to unixnu.lock.
+
+[[source]]
+name = "sm8550"
+kind = "soc"
+git = "https://github.com/UniXNU/UniXNU-sm8550-common"
+# Reviewed 40-character commit. This is the revision the component catalog pins
+# for Sm8550Platform and the revision used by UniXNU-sheng and UniXNU-shennong.
+# It supplies dts/sm8550.dtsi, configs/sm8550.config, kits/Sm8550Platform and
+# the shared XNU patch series.
+commit = "23b2049fcd9e30356161def84231334fb55ecca9"
