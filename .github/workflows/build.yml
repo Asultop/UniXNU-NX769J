@@ -304,17 +304,25 @@ jobs:
         id: toolchain
         uses: actions/cache@v4
         with:
-          path: /opt/unixnu-linux
+          path: ~/unixnu-linux
           key: unixnu-linux-toolchain-${{ hashFiles('UniXNU/scripts/linux/**') }}
 
+      # Install under the runner's home, not /opt. The installer runs as root and
+      # /opt/unixnu-linux ends up root owned; actions/cache packs as the runner
+      # user and silently fails to save root-owned trees, which is why the cache
+      # never persisted and every run rebuilt clang from source. The path is
+      # expanded before sudo, which resets HOME to /root.
       - name: Install the Linux toolchain
         if: steps.toolchain.outputs.cache-hit != 'true'
         working-directory: UniXNU
-        run: sudo python3 scripts/linux/setup-toolchain.py
+        run: |
+          TOOLCHAIN="$HOME/unixnu-linux"
+          sudo env UNIXNU_TOOLCHAIN="$TOOLCHAIN" python3 scripts/linux/setup-toolchain.py "$TOOLCHAIN"
+          sudo chown -R "$(id -u):$(id -g)" "$TOOLCHAIN"
 
       - name: Check the toolchain
         working-directory: UniXNU
-        run: python3 scripts/linux/setup-toolchain.py --check
+        run: UNIXNU_TOOLCHAIN="$HOME/unixnu-linux" python3 scripts/linux/setup-toolchain.py --check --llvm-config /usr/bin/llvm-config
 
       - name: Install the OS profile
         run: |
@@ -361,11 +369,22 @@ jobs:
 
       - name: Build the kernel
         working-directory: UniXNU
-        run: ./unixnu build kernel -D ../UniXNU-NX769J
+        run: UNIXNU_TOOLCHAIN="$HOME/unixnu-linux" ./unixnu build kernel -D ../UniXNU-NX769J
 
       - name: Report the kernel
         if: always()
         run: |
           find UniXNU/out -maxdepth 6 -name 'kernel.macho*' -o -name '*.unstripped.noctf' 2>/dev/null | head
           find UniXNU/out -name '*.log' 2>/dev/null | head -20
+
+      # The compile errors land in the build logs rather than on stdout, so ship
+      # them as an artifact instead of leaving a failed run undiagnosable.
+      - name: Upload the build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-build-logs
+          path: UniXNU/out/**/logs/
+          if-no-files-found: ignore
+          retention-days: 14
 
