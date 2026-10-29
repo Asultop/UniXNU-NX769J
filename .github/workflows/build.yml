@@ -5,9 +5,11 @@ name: Build
 #   validate     repository structure, TOML, pins, defconfig, and the UniXNU
 #                porting-record checker against the real component catalog
 #   device-tree  compiles dts/nx769j.dts against the pinned SoC DTSI with dtc
-#   resolve      runs the real UniXNU build driver: defconfig merges the
-#                ordered profile fragments and status reports the resolved
-#                profiles, components, source pins and patch order
+#   resolve      runs the real UniXNU build driver through the documented
+#                step 4 sequence: fetch resolves every source pin, defconfig
+#                merges the ordered profile fragments, tree assembles the
+#                build tree, and status reports the resolved profiles,
+#                components, source revisions and patch order
 #
 # Assembling kernel, firmware, payload and boot images needs the uefi-nx769j
 # platform package, the target IPSW and an Xcode host. None of those exist for
@@ -104,6 +106,7 @@ jobs:
   resolve:
     name: Resolve the build tree
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: Check out the device repository
         uses: actions/checkout@v4
@@ -117,32 +120,37 @@ jobs:
           ref: main
           path: UniXNU
 
-      - name: Check out the pinned SoC source
-        uses: actions/checkout@v4
-        with:
-          repository: UniXNU/UniXNU-sm8550-common
-          ref: 23b2049fcd9e30356161def84231334fb55ecca9
-          path: UniXNU-sm8550-common
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Select the device configuration
+      - name: Restore the source cache
+        uses: actions/cache@v4
+        with:
+          path: UniXNU/out/feeds
+          key: feeds-${{ hashFiles('UniXNU-NX769J/feeds.toml', 'UniXNU-NX769J/unixnu.lock', 'UniXNU/components.toml') }}
+          restore-keys: |
+            feeds-
+
+      - name: Fetch the pinned sources
         working-directory: UniXNU
         run: |
           chmod +x unixnu
-          ./unixnu defconfig nx769j_defconfig \
-            -D ../UniXNU-NX769J \
-            --local-module soc:sm8550=../UniXNU-sm8550-common
+          ./unixnu fetch -D ../UniXNU-NX769J
+
+      - name: Select the device configuration
+        working-directory: UniXNU
+        run: ./unixnu defconfig nx769j_defconfig -D ../UniXNU-NX769J
+
+      - name: Assemble the build tree
+        working-directory: UniXNU
+        run: ./unixnu tree -D ../UniXNU-NX769J
 
       - name: Report the resolved configuration
         working-directory: UniXNU
         run: |
-          ./unixnu status --json \
-            -D ../UniXNU-NX769J \
-            --local-module soc:sm8550=../UniXNU-sm8550-common > status.json
+          ./unixnu status --json -D ../UniXNU-NX769J > status.json
           python3 - <<'PY'
           import json
           status = json.load(open('status.json'))
@@ -155,6 +163,9 @@ jobs:
           print('board       :', {k: board.get(k) for k in ('name', 'soc', 'soc_source', 'os_profile', 'kit')})
           components = status.get('components') or {}
           print('components  :', components if isinstance(components, list) else sorted(components))
+          modules = status.get('modules') or {}
+          for name, module in sorted(modules.items()) if isinstance(modules, dict) else []:
+              print(f'module      : {name} -> {module}')
           PY
 
       - name: Check the merged kernel configuration
@@ -167,3 +178,9 @@ jobs:
           grep -qx 'XNU_NATIVE_VIRTIO_BLOCK=1' "$config"
           grep -qx 'XNU_NATIVE_LEGACY_DISPLAY=1' "$config"
           grep -qx 'XNU_NATIVE_ADRENO=0' "$config"
+
+      - name: Report source pin changes
+        if: always()
+        run: |
+          echo "unixnu.lock after fetch:"
+          git -C UniXNU-NX769J --no-pager diff -- unixnu.lock || true
