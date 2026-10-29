@@ -221,15 +221,33 @@ wrong vendor binary fail before EDK II runs rather than mid-build.
 ## Memory map
 
 `Library/MemoryMapLib/MemoryMapLib.c` is the board's UEFI memory map and is the
-most hardware-specific file in the package. It must agree with the reservations
-measured on this device:
+most hardware-specific file in the package. The one staged here is nx729j's with
+the identifiers renamed, and **it is not this board's map** — see the warning in
+[`firmware/README.md`](../firmware/README.md).
 
-| Region | Address | Size | Note |
+Where the two agree, and where they do not:
+
+| Region | nx729j's map | NX769J measured | |
 | --- | --- | --- | --- |
-| DRAM base | `0x80000000` | — | `PcdSystemMemoryBase`; measured |
-| Firmware volume | `0xA7100000` | `0x300000` | `uefi_fd.base` / `.size` |
-| UEFI stack | `0xA760D000` | `0x40000` per core | `PcdCPUCoresStackBase` |
-| Contiguous splash | `0xe3940000` | `0x2b00000` | **Measured**. Must stay reserved; the boot image advertises it as `cont_splash_region`. |
+| DRAM base | `0x80000000` | `0x80000000` | agrees — `PcdSystemMemoryBase` |
+| Firmware volume | `0xA7100000` / `0x300000` | same | agrees — `uefi_fd.base` / `.size` |
+| UEFI stack | `0xA760D000` / `0x40000` | same | agrees — `PcdCPUCoresStackBase` |
+| `HYP` | `0x80000000` / `0x00A00000` | `0x80000000` / `0x00E00000` | **differs** — `gunyah_hyp_region` |
+| Contiguous splash | `0xB8000000` / `0x2B00000` | `0xE3940000` / `0x2B00000` | **differs** — `splash_region`, `cont_splash_region` |
+| `gpu_microcode_region` | absent | `0x9B09A000` / `0x2000` | **absent from the map** |
+| XBL DT, AOP, SMEM, PIL, TZApps, HW Fence, … | present | not measured | unverified |
+
+The size of the splash matches what sheng and shennong use, and its end —
+`0xE3940000 + 0x2B00000 = 0xE6440000` — is exactly where nx729j's map puts
+`HW Fence`, so on this board the two are adjacent rather than overlapping. That
+is suggestive, not a measurement.
+
+The reservation list has to come from the device:
+`ls /proc/device-tree/reserved-memory/` and each node's `reg`.
+[`device-inputs.md`](../device-inputs.md) records three of them and not the
+rest. **Do not boot the firmware until the map is reconciled**: a map that
+reserves the wrong ranges lets the firmware write over what the bootloader or
+TrustZone owns.
 
 `Library/ConfigurationMapLib/ConfigurationMapLib.c` is the SoC configuration map
 and is shared with every Lanai board; it should follow `nx729jPkg`'s.
@@ -282,12 +300,13 @@ plausible value.
 | Item | Status | How to close it |
 | --- | --- | --- |
 | `SOC_TYPE` | Set to `2` (SM8650-AB, 3.30 GHz, 8 cores). The RedMagic 9 Pro is the 3.30 GHz bin and this board reports 8 CPUs (2×A520 + 5×A720 + 1×X4), so it is not a 6-core Q variant. | Read the prime core's max frequency from the device; `SOC_TYPE` `2` vs `4` distinguishes 3.30 from 3.40 GHz. |
-| `PcdCPUCoresStackBase` | Inherited from `nx729jPkg`. | Check it against the Lanai memory map and the splash reservation before the first boot. |
+| `PcdCPUCoresStackBase` | Inherited from `nx729jPkg`, and `MemoryMapLib` puts `UEFI Stack` at the same address. | Check it against the Lanai memory map and the splash reservation before the first boot. |
+| **`MemoryMapLib`** | **Derived from `nx729jPkg`'s and two of its entries are known to be wrong here** — `HYP` is `0x00A00000` where this board measures `0x00E00000`, and `Display Reserved` is at `0xB8000000` where this board's splash is at `0xE3940000`. The other vendor reservations are unverified. | Read `ls /proc/device-tree/reserved-memory/` with each node's `reg` from the device and rebuild the table. **Do not boot the firmware until this is done** — a wrong map lets it write over what the bootloader or TrustZone owns. |
 | Firmware DTB | Not collected. `Resources/DTBs/nx769j.dtb` has to come from this device's `vendor_boot`. | Extract it and record its hash in `proprietary-files.txt`. See the firmware area of [`porting.toml`](../porting.toml). |
-| Vendor DXE drivers | Not extracted. | `scripts/extract-files.py` against the device firmware package. |
-| `MemoryMapLib` | Not written. | Derive from `nx729jPkg`'s and reconcile with the measured reservations above. |
-| UniXNU/DarwinBoot modules | Not yet added to the DSC and FDF. | Add the four INFs and the two library mappings listed above. |
-| `PLATFORM_GUID` | Not chosen. | Generate one; it must not collide with `nx729jPkg`'s. |
+| Vendor DXE drivers | Not extracted. `scripts/check-nx769j-firmware.py` reports **0 of 20** under `Binaries/nx769j`. | `scripts/extract-files.py` against the device firmware package. They cannot be redistributed, so every build machine has to collect them. |
+| UniXNU/DarwinBoot modules | **Added** to the DSC `[Components]`, the FDF volume, and the two library mappings. `./unixnu build package` builds `UniXNU.efi`, `UniXNUDxe.efi` and `UniXNURamDiskDxe.efi` on Linux with CLANGPDB, which is what proves those integration points resolve. | — |
+| `PLATFORM_GUID` | Chosen: `F57D1EE0-603C-4EE3-AF74-1C995CE51AF3`, distinct from `nx729jPkg`'s. | — |
+| `early_security_init` | Unset. `extract-ipsw-pins.py` used to emit AMFI's kmod stub address, which is not what the hook calls. | Reversing task; see the packaging area of [`porting.toml`](../porting.toml). |
 | Boot on hardware | Not attempted. | Follow [bring-up](https://unixnu.com/porting/bring-up) and [`docs/FLASHING.md`](FLASHING.md). |
 
 ## Related
