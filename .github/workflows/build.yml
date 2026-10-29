@@ -328,8 +328,12 @@ jobs:
       # sudo, which resets HOME to /root. scripts/unixnu/kernel.py resolves the
       # toolchain through UNIXNU_TOOLCHAIN, so the same variable drives both the
       # install and the build.
+      # Run unconditionally. The installer is idempotent: each component is
+      # skipped when it already exists, so on a cache hit it only places the
+      # shims the cache cannot hold. /usr/bin/xcrun is one of them and
+      # scripts/unixnu/kernel.py requires it, so skipping this step on a cache
+      # hit leaves the build failing with "xcrun missing".
       - name: Install the Linux toolchain
-        if: steps.toolchain.outputs.cache-hit != 'true'
         working-directory: UniXNU
         run: |
           TOOLCHAIN="$HOME/unixnu-linux"
