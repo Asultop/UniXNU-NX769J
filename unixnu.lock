@@ -1,8 +1,4 @@
 # Resolved git sources, written by "unixnu fetch". Local sources are never recorded.
-#
-# This device repository declares no git submodules, so `unixnu fetch` records
-# the selected component sources here as well as the feed sources. Each
-# component revision matches the pin in UniXNU's components.toml.
 
 [source."ArmCpu"]
 commit = "9066b53bbc82e92a98ec44a11dd50fd13eaf1a1b"
