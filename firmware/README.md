@@ -36,7 +36,7 @@ Everything the package adds is here, so `cp -R firmware/* .` is the whole step.
 | File | Why it is not here |
 | --- | --- |
 | `Resources/DTBs/nx769j.dtb` | Extract from the device's `vendor_boot`; not collected. |
-| `Binaries/nx769j/QcomPkg/Drivers/…` | Vendor UEFI DXE drivers, extracted from the device firmware package by `scripts/extract-files.py`. Not redistributable, so they cannot be staged here. |
+| `Binaries/nx769j/QcomPkg/Drivers/…` | Vendor UEFI DXE drivers. All 20 come out of `uefi.img` with [`scripts/extract-uefi-drivers.py`](../scripts/extract-uefi-drivers.py); what is left is laying them out with their EDK II INF wrappers. Not redistributable, so they cannot be staged here and every build machine extracts them. |
 
 `scripts/check-nx769j-firmware.py` reports exactly which of these are still
 missing and whether they are fatal, and is what `./unixnu build firmware` runs
