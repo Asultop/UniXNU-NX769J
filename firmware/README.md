@@ -46,24 +46,34 @@ absent.
 
 ## Warning: the memory map is not this board's
 
-`MemoryMapLib.c` is nx729j's map with the identifiers renamed. Two of its
-entries are known to be wrong for NX769J, because this board measures them
-differently:
+`MemoryMapLib.c` is nx729j's map with the identifiers renamed. **Do not boot
+firmware built against it.** Three conflicts are already known against sources
+that measured this board:
 
-| Entry | nx729j's map | NX769J measured |
+| Entry | nx729j's map | NX769J |
 | --- | --- | --- |
 | `HYP` | `0x80000000` / `0x00A00000` | `0x80000000` / `0x00E00000` (`gunyah_hyp_region`) |
 | `Display Reserved` | `0xB8000000` / `0x02B00000` | `0xE3940000` / `0x02B00000` (`splash_region`, `cont_splash_region`) |
+| `TZApps Reserved` | `0xD8800000` / `0x07400000` | overlaps `ramoops@D7E00000` `0xD7E00000` / `0x02000000` |
 
-The rest of the table — XBL DT, AOP, SMEM, PIL, TZApps, HW Fence and the other
-vendor reservations — is unverified. Those come from the device's own XBL, and
-the only complete source is
-`ls /proc/device-tree/reserved-memory/` with each node's `reg`, which
-[`device-inputs.md`](../device-inputs.md) did not capture.
+The data to rebuild it from is no longer missing. The device's flash package
+carries `vendor_boot.img`, whose `dtb` field holds six device trees; four are
+Pineapple variants with byte-identical reservation sets, and
+[`scripts/extract-dtb`](../scripts/extract-firmware-dtb.py) prints all of them.
+The full list — 49 nodes, 36 at fixed addresses — is in
+[`device-inputs.md`](../device-inputs.md#fw-dtb).
 
-**Do not boot this firmware until the map is reconciled.** A memory map that
-reserves the wrong ranges lets the firmware write over something the bootloader
-or TrustZone owns. See the open items in
+What remains is the mapping itself. nx729j's table is a hand-built hybrid: the
+device tree's fine-grained reservations grouped into coarser descriptors, plus
+UEFI's own regions (`FD Reserved`, `UEFI Stack`, `SEC Heap`, `Sched Heap`,
+`FV Region`, `DXE Heap`) that the device tree knows nothing about. Rebuild it
+from the reservation list rather than editing it piecemeal — moving
+`Display Reserved` alone would leave `0xB8000000..0xBAB00000` unaccounted, and
+the device tree reserves nothing there, which trades a known wrong region for a
+silently unmanaged one.
+
+A map that reserves the wrong ranges lets the firmware write over what the
+bootloader or TrustZone owns. See the open items in
 [`docs/UEFI-FIRMWARE.md`](../docs/UEFI-FIRMWARE.md).
 
 ## The one line that is easy to get wrong

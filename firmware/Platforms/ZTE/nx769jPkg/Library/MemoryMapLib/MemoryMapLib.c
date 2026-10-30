@@ -1,3 +1,31 @@
+//
+//  NX769J UEFI memory map.
+//
+//  THIS IS NX729J's MAP WITH THE IDENTIFIERS RENAMED, AND IT IS NOT THIS
+//  BOARD'S MAP. Do not boot firmware built against it. It is here so the
+//  divergence is reviewable rather than implicit, and so the rebuild has a
+//  starting point with UEFI's own regions already laid out.
+//
+//  The data to rebuild it from now exists:
+//  scripts/extract-firmware-dtb.py reads the six device trees in
+//  vendor_boot.img and prints their reservations; the full list is in
+//  device-inputs.md under "Firmware device tree reservations". Conflicts found
+//  so far, each against a source that measured this board:
+//
+//    HYP               0x80000000 / 0x00A00000 here
+//                      0x80000000 / 0x00E00000 in gunyah_hyp_region, both in
+//                      the firmware device tree and measured on the handset
+//    Display Reserved  0xB8000000 here, where this board's splash is at
+//                      0xE3940000 / 0x02B00000 (cont_splash_region), confirmed
+//                      twice: measured, and in the public dump's DTBO
+//    TZApps Reserved   0xD8800000 / 0x07400000 here overlaps ramoops@D7E00000
+//                      0xD7E00000 / 0x02000000 in this board's device tree
+//
+//  Moving Display Reserved leaves 0xB8000000..0xBAB00000 unaccounted, and the
+//  device tree reserves nothing there -- so a one-line patch would trade a known
+//  wrong region for a silently unmanaged one. Rebuild the table from the
+//  reservation list instead of editing it piecemeal.
+//
 #include <Library/MemoryMapLib.h>
 
 STATIC

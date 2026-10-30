@@ -236,19 +236,25 @@ Where the two agree, and where they do not:
 | Contiguous splash | `0xB8000000` / `0x2B00000` | `0xE3940000` / `0x2B00000` | **differs** — `splash_region`, `cont_splash_region` |
 | `gpu_microcode_region` | absent | `0x9B09A000` / `0x2000` | **absent from the map** |
 | `disp_rdump_region` | absent | `0xE3940000` / `0x800000` | **absent from the map** — a display ramdump window inside the splash region, from the public firmware dump |
-| XBL DT, AOP, SMEM, PIL, TZApps, HW Fence, … | present | not measured | unverified |
+| `ramoops` | absent | `0xD7E00000` / `0x200000` | **overlaps `TZApps Reserved`** at `0xD8800000` |
+| XBL DT, AOP, SMEM, HW Fence, … | present | present | agree — all 49 reservations are now known |
 
-The size of the splash matches what sheng and shennong use, and its end —
-`0xE3940000 + 0x2B00000 = 0xE6440000` — is exactly where nx729j's map puts
-`HW Fence`, so on this board the two are adjacent rather than overlapping. That
-is suggestive, not a measurement.
+The reservation list is complete. It comes from `vendor_boot.img` in the device's
+flash package, whose `dtb` field holds six device trees; four are Pineapple
+variants with byte-identical reservation sets. `scripts/extract-firmware-dtb.py`
+prints them and the full table is in
+[`device-inputs.md`](../device-inputs.md#fw-dtb).
 
-The reservation list has to come from the device:
-`ls /proc/device-tree/reserved-memory/` and each node's `reg`.
-[`device-inputs.md`](../device-inputs.md) records three of them and not the
-rest. **Do not boot the firmware until the map is reconciled**: a map that
-reserves the wrong ranges lets the firmware write over what the bootloader or
-TrustZone owns.
+What remains is the mapping. nx729j's table is a hand-built hybrid: the device
+tree's fine-grained reservations grouped into coarser descriptors, plus UEFI's
+own regions (`FD Reserved`, `UEFI Stack`, `SEC Heap`, `Sched Heap`, `FV Region`,
+`DXE Heap`) that the device tree knows nothing about. Rebuild it from the
+reservation list rather than editing it piecemeal — moving `Display Reserved`
+alone would leave `0xB8000000..0xBAB00000` unaccounted, and the device tree
+reserves nothing there.
+
+**Do not boot the firmware until the map is rebuilt**: a map that reserves the
+wrong ranges lets the firmware write over what the bootloader or TrustZone owns.
 
 `Library/ConfigurationMapLib/ConfigurationMapLib.c` is the SoC configuration map
 and is shared with every Lanai board; it should follow `nx729jPkg`'s.
@@ -302,8 +308,8 @@ plausible value.
 | --- | --- | --- |
 | `SOC_TYPE` | Set to `2` (SM8650-AB, 3.30 GHz, 8 cores). The RedMagic 9 Pro is the 3.30 GHz bin and this board reports 8 CPUs (2×A520 + 5×A720 + 1×X4), so it is not a 6-core Q variant. | Read the prime core's max frequency from the device; `SOC_TYPE` `2` vs `4` distinguishes 3.30 from 3.40 GHz. |
 | `PcdCPUCoresStackBase` | Inherited from `nx729jPkg`, and `MemoryMapLib` puts `UEFI Stack` at the same address. | Check it against the Lanai memory map and the splash reservation before the first boot. |
-| **`MemoryMapLib`** | **Derived from `nx729jPkg`'s and two of its entries are known to be wrong here** — `HYP` is `0x00A00000` where this board measures `0x00E00000`, and `Display Reserved` is at `0xB8000000` where this board's splash is at `0xE3940000`. The other vendor reservations are unverified. | Read `ls /proc/device-tree/reserved-memory/` with each node's `reg` from the device and rebuild the table. **Do not boot the firmware until this is done** — a wrong map lets it write over what the bootloader or TrustZone owns. |
-| Firmware DTB | Not collected. `Resources/DTBs/nx769j.dtb` has to come from this device's `vendor_boot`. | Extract it and record its hash in `proprietary-files.txt`. See the firmware area of [`porting.toml`](../porting.toml). |
+| **`MemoryMapLib`** | **Derived from `nx729jPkg`'s and not this board's.** Three conflicts are known — `HYP` size, `Display Reserved` address, and `TZApps Reserved` overlapping this board's `ramoops`. The data to rebuild it from is now complete. | Rebuild the table from the 49 reservations in [`device-inputs.md`](../device-inputs.md#fw-dtb), grouping them and adding UEFI's own regions. **Do not boot the firmware until this is done** — a wrong map lets it write over what the bootloader or TrustZone owns. |
+| Firmware DTB | **Collected.** `vendor_boot.img` in the device's flash package carries six trees; the board matches the v2 pair by `qcom,msm-id`. | `scripts/extract-firmware-dtb.py --vendor-boot … --tree 2 -o Resources/DTBs/nx769j.dtb`. All four Pineapple trees have identical reservations, so the map does not depend on the choice. |
 | Vendor DXE drivers | Not extracted. `scripts/check-nx769j-firmware.py` reports **0 of 20** under `Binaries/nx769j`. | `scripts/extract-files.py` against the device firmware package. They cannot be redistributed, so every build machine has to collect them. |
 | UniXNU/DarwinBoot modules | **Added** to the DSC `[Components]`, the FDF volume, and the two library mappings. `./unixnu build package` builds `UniXNU.efi`, `UniXNUDxe.efi` and `UniXNURamDiskDxe.efi` on Linux with CLANGPDB, which is what proves those integration points resolve. | — |
 | `PLATFORM_GUID` | Chosen: `F57D1EE0-603C-4EE3-AF74-1C995CE51AF3`, distinct from `nx729jPkg`'s. | — |
