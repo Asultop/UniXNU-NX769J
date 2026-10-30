@@ -140,7 +140,38 @@ rule out: build twice from a clean `Build/` and compare.
 
 ## The Data seed
 
-Not built on this host: every step needs `hdiutil` and `diskutil apfs`.
-`.github/workflows/data-seed.yml` runs `scripts/build-data-seed.py` on a hosted
-macOS runner instead and uploads the seed as an artifact. Its run, the volume
-UUID it reports and the seed hash belong in this file once one completes.
+Built on a hosted macOS runner, because every step needs `hdiutil`:
+`.github/workflows/data-seed.yml` runs `scripts/build-data-seed.py` on
+`macos-26` and uploads the seed as an artifact.
+
+| Result | Value |
+| --- | --- |
+| Workflow run | [41026291337](https://github.com/Asultop/UniXNU-NX769J/actions/runs/41026291337) |
+| Device revision | `ed45ee8` |
+| Artifact | `nx769j-data-seed`, 567485 bytes |
+| Artifact sha256 | `589fb90de70a9d5b5e367464a66674c659c7bd32ee93ced445ead9f2f77136bd` |
+| Data volume UUID | `DA9A01BC-22A9-47B0-8EA0-27B3C35E37E4` |
+| Size | 256 MiB container, a RAM seed |
+
+The volume UUID is new on every run: the seed is formatted from scratch each
+time, so it is recorded here rather than pinned anywhere. Whether the kernel
+needs it configured depends on the block driver that publishes the seed window;
+take it from this table, not from a previous run.
+
+Two things about the artifact are worth knowing. It is uploaded **unencrypted**,
+because the `ARTIFACT_PASSPHRASE` secret is not set and the workflow refuses to
+invent one; it holds files taken from the iOS restore image. And downloading an
+artifact needs a token even for a public repository, so it is fetched with
+`gh run download` or `curl` with a `GITHUB_TOKEN` rather than anonymously.
+
+### How the run got there
+
+Nine runs failed before it produced anything, and job logs need repository
+access, so each one was diagnosed from the run page's annotations instead. In
+order: the cache key contained a comma, `tee` masked the script's exit code, the
+seed was made at 32 MiB and then grown, `packed_ramdisk.py` was missing because
+`drivers/DarwinBoot` is a UniXNU submodule that `actions/checkout` does not
+initialise, the copy loop called `Path.symlink` where the method is
+`symlink_to`, and finally the log redirect ran before `out/` existed so the
+script never started. The `::error::` reporting and the per-step `ERR` trap that
+named each of the last four are in the workflow and stay there.
