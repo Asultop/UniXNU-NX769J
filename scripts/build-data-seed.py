@@ -116,7 +116,7 @@ def copy_var(source: Path, target: Path) -> tuple[int, int]:
         for name in list(dirs) + files:
             here, there = Path(current) / name, destination / name
             if here.is_symlink():
-                there.symlink(os.readlink(here))
+                there.symlink_to(os.readlink(here))
                 if name in dirs:
                     dirs.remove(name)
             elif here.is_file():
@@ -144,7 +144,8 @@ def tree_bytes(source: Path) -> int:
 
 def verify_container(image: Path, size_mib: int) -> int:
     """The image must start with an APFS container that fills it."""
-    header = image.open('rb').read(4096)
+    with image.open('rb') as stream:
+        header = stream.read(4096)
     if header[32:36] != b'NXSB':
         fail('the image does not start with an APFS container')
     block_size = int.from_bytes(header[36:40], 'little')
