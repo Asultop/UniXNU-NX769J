@@ -151,6 +151,9 @@ jobs:
           # Run it out of the pipeline and echo the last line as an annotation on
           # failure: a traceback on stderr is not an annotation, and this is the
           # only part of a failed run readable without repository access.
+          # The redirect below needs this directory to exist; without it bash
+          # fails the redirection and the script never runs.
+          mkdir -p "$RUNNER_TEMP/out"
           set +e
           python3 device/scripts/build-data-seed.py \
             --os-mount "$RUNNER_TEMP/os-mount" \
