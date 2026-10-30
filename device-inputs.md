@@ -218,8 +218,36 @@ each one's model, IDs and reservations. Read-only.
 
 49 nodes, 36 with a fixed address
 
-## DRAM
+### Unique chip ID {#chip-id}
 
+`board.toml [payload.adt] unique_chip_id` is `required`, and the build records
+that the value "is not stored in any repository". It is the SoC serial, read
+over read-only adb from `192.168.5.195:41919`:
+
+```
+adb shell 'cat /sys/devices/soc0/serial_number'
+```
+
+| Property | Value |
+| --- | --- |
+| `/sys/devices/soc0/serial_number` | `2327598128` |
+| as hex, for `--unique-chip-id` | **`8abc5430`** |
+
+Cross-checks on the same read:
+
+| Property | Value | |
+| --- | --- | --- |
+| `/sys/devices/soc0/soc_id` | `557` | `0x22d` — matches `qcom,msm-id`, so SM8650 |
+| `/sys/devices/soc0/machine` | `PINEAPPLE` | |
+| `/sys/devices/soc0/revision` | `2.0` | matches `qcom,msm-id` revision `0x20000` |
+| `qcom,board-id` | `0x00000008_00000000` | board id 8, subtype 0 |
+| `ro.boot.emmcid` | `17d5346c` | the UFS chip id, a different per-device value |
+
+`soc_id` 557 is the earlier `qcom,msm-id` reading spelled out: `0x22d` is
+SM8650/Pineapple, which also confirms which of the two `qcom,msm-id` entries is
+this silicon.
+
+## DRAM
 `gunyah_hyp_region@80000000` and the lowest System RAM range both place the
 DRAM base at **0x80000000**, which is the ARM64 Qualcomm base and the value
 already in `dts/nx769j.dts`.
