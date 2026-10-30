@@ -183,6 +183,15 @@ packages = [
 
 [firmware.defines]
 DEVICE_MODEL = "nx769j"
+# The four defines DeviceBuild.py would otherwise set. firmware.py drives EDK II
+# build directly and so bypasses Mu-Silicium's own build driver, which is where
+# these come from -- an undefined ENABLE_SECUREBOOT reaches
+# SiliciumPkg/Library/SecureBootHandlerLib as an empty token and fails the
+# preprocessor. Same set, same values as the sibling RedMagic port.
+ENABLE_SECUREBOOT = "1"
+MEMORY_PROTECTION = "TRUE"
+SHIP_MODE = "FALSE"
+BUILDID_STRING = "nx769j-research"
 
 # The NX769J board configuration records BOARD_BOOTIMG_HEADER_VERSION := 4, but
 # that is the Android build system's setting for building a stock boot.img, not

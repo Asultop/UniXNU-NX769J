@@ -116,6 +116,12 @@
   HobLib|MdePkg/Library/DxeHobLib/DxeHobLib.inf
   FdtLib|MdePkg/Library/BaseFdtLib/BaseFdtLib.inf
 
+  #
+  # UniXNU.inf's own library, out of the device package tree rather than a
+  # Mu-Silicium one.
+  #
+  UniXNULib|UniXNUPkg/Library/UniXNULib/UniXNULib.inf
+
 [Components]
   #
   # ACPI Tables

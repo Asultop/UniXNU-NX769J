@@ -51,6 +51,7 @@ FFS_FILE_HEADER2 = 0x00  # size field 0xFFFFFF means a large-file header follows
 SECTION_GUID_DEFINED = 0x02
 SECTION_PE32 = 0x10
 SECTION_TE = 0x12
+SECTION_DEPEX = 0x13
 SECTION_UI = 0x15
 SECTION_VERSION = 0x16
 SECTION_RAW = 0x19
@@ -69,18 +70,112 @@ UI_TO_INF = {
     'I2C': 'I2CDxe',
     'DALTLMM': 'TLMMDxe',
     'PmicDxe': 'PmicDxeLa',
+    'SPMI': 'SPMIDxe',
+    'SPI': 'SPIDxe',
+    'XhciPciEmulation': 'XhciPciEmulationDxe',
+    'GlinkDxe': 'GLinkDxe',
 }
-EXPECTED = (
-    'EnvDxe', 'ShmBridgeDxeLA', 'ScmDxeCompat', 'TzDxeLA', 'ChipInfoDxe',
-    'IPCCDxe', 'PlatformInfoDxe', 'DALSYSDxe', 'HALIOMMUDxe', 'HWIODxe',
-    'I2CDxe', 'TLMMDxe', 'PmicDxeLa', 'UFSDxe', 'CmdDbDxe', 'PwrUtilsDxe',
-    'RpmhDxe', 'NpaDxe', 'ULogDxe', 'VcsDxe',
-)
-
-
 def inf_name(ui: str) -> str:
     """The INF name the DSC uses, given the module's UI section name."""
     return UI_TO_INF.get(ui, ui)
+
+
+def referenced_modules(path: Path) -> list[tuple[str, str]]:
+    """The (directory, INF name) pairs the platform's includes actually name.
+
+    APRIORI.inc, DXE.inc and RAW.inc all pull from Binaries/<device>, and
+    APRIORI.inc names one that DXE.inc has commented out. Reading one of the
+    three under-counts the set. Some modules are in a family directory that
+    differs from the INF name -- `TzDxe/ScmDxeCompat.inf` beside
+    `TzDxe/TzDxeLA.inf`, and `PmicDxe/PmicDxeLa.inf` -- so the pair is kept
+    rather than assumed equal.
+    """
+    here = path if path.is_dir() else path.parent
+    includes = sorted(here.glob('*.inc')) if here.is_dir() else [path]
+    if not includes:
+        fail(f'no Include/*.inc under {here}; cannot tell which modules the firmware needs')
+    out: list[tuple[str, str]] = []
+    for include in includes:
+        for line in include.read_text(encoding='utf-8').splitlines():
+            stripped = line.strip()
+            if not stripped.startswith('INF Binaries/'):
+                continue
+            parts = stripped.split('INF ', 1)[1].strip().split('/')
+            entry = (parts[-2], parts[-1][:-4] if parts[-1].endswith('.inf') else parts[-1])
+            if entry not in out:
+                out.append(entry)
+    return out
+
+
+def referenced_raw_files(path: Path) -> list[str]:
+    """The RawFiles/ names the platform's includes embed.
+
+    Panel descriptions sit behind `!if $(USE_CUSTOM_DISPLAY_DRIVER) == 1`, which
+    this board sets to 0, so most of the list is not built. The unguarded ones
+    are what the firmware actually needs; the guarded ones are reported as
+    unreferenced rather than required.
+    """
+    here = path if path.is_dir() else path.parent
+    out: list[str] = []
+    for include in sorted(here.glob('*.inc')):
+        guarded = 0
+        for line in include.read_text(encoding='utf-8').splitlines():
+            stripped = line.strip()
+            if stripped.startswith('!if'):
+                guarded += 1
+                continue
+            if stripped.startswith('!endif'):
+                guarded = max(0, guarded - 1)
+                continue
+            if guarded or not stripped.startswith('SECTION RAW'):
+                continue
+            marker = 'RawFiles/'
+            if marker in stripped:
+                name = stripped.split(marker, 1)[1].strip()
+                if name not in out:
+                    out.append(name)
+    return out
+
+
+INF_TEMPLATE = '''[Defines]
+  INF_VERSION                    = 0x0001001B
+  BASE_NAME                      = {base_name}
+  FILE_GUID                      = {file_guid}
+  MODULE_TYPE                    = DXE_DRIVER
+  VERSION_STRING                 = 1.0
+  ENTRY_POINT                    = EfiEntry
+
+[Binaries.AARCH64]
+{binaries}
+[Depex]
+  TRUE
+'''
+
+
+def file_guid(name: str) -> str:
+    """A stable GUID per module, so a rebuild produces the same wrapper.
+
+    EDK II identifies a module in the firmware volume by this, so it has to be
+    unique; it does not have to be the one Device-Binaries picked, and deriving
+    it from the name keeps the output reproducible.
+    """
+    import uuid
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f'UniXNU-nx769j:{name}')).upper()
+
+
+def write_module(root: Path, directory: str, inf: str, entry: dict) -> Path:
+    """One driver directory: the INF wrapper, the module and its depex."""
+    out = root / directory
+    out.mkdir(parents=True, exist_ok=True)
+    (out / f'{inf}.efi').write_bytes(entry['payload'])
+    binaries = [f'  PE32|{inf}.efi|*']
+    if entry['depex']:
+        (out / f'{inf}.depex').write_bytes(entry['depex'])
+        binaries.insert(0, f'  DXE_DEPEX|{inf}.depex|*')
+    (out / f'{inf}.inf').write_text(INF_TEMPLATE.format(
+        base_name=entry['name'], file_guid=file_guid(inf),
+        binaries='\n'.join(binaries) + '\n'))
+    return out
 
 
 def fail(message: str) -> None:
@@ -188,10 +283,12 @@ def collect(image: bytes, base: int | None = None, length: int | None = None,
         base, length = find_volume(image)
     out = []
     for offset, guid, file_type, size, body in files(image, base, length):
-        name, payload, nested = '', b'', []
+        name, payload, depex, nested = '', b'', b'', []
         for section_type, data in sections(body):
             if section_type == SECTION_UI:
                 name = ui_name(data)
+            elif section_type == SECTION_DEPEX and not depex:
+                depex = data
             elif section_type in (SECTION_PE32, SECTION_TE, SECTION_RAW) and not payload:
                 payload = data
             elif section_type == SECTION_GUID_DEFINED and len(data) >= 20:
@@ -212,7 +309,8 @@ def collect(image: bytes, base: int | None = None, length: int | None = None,
                             if 0 < inner_length <= len(inner) - inner_base:
                                 nested = collect(inner, inner_base, inner_length, depth + 1)
         out.append({'offset': offset, 'guid': guid.hex(), 'type': file_type,
-                    'size': size, 'name': name, 'payload': payload, 'nested': nested})
+                    'size': size, 'name': name, 'payload': payload,
+                    'depex': depex, 'nested': nested})
     return out
 
 
@@ -229,6 +327,12 @@ def main() -> int:
                         help='the firmware image carrying the volume (for example uefi.img)')
     parser.add_argument('--out', type=Path, default=None,
                         help='write each driver here as <name>.efi')
+    parser.add_argument('--layout', type=Path, default=None,
+                        help='write the Binaries/<device>/QcomPkg/Drivers/ tree here, '
+                             'each module with its INF wrapper and depex')
+    parser.add_argument('--dxe-inc', type=Path,
+                        default=DEVICE / 'firmware/Platforms/ZTE/nx769jPkg/Include',
+                        help='the DSC include directory naming the modules to recover')
     parser.add_argument('--require', action='store_true',
                         help='fail unless every expected driver is present')
     args = parser.parse_args()
@@ -244,30 +348,59 @@ def main() -> int:
     print(f'  {len(entries)} FFS files ({len(outer)} outer, {nested} in nested volumes), '
           f'{sum(1 for e in entries if e["payload"])} with a body')
 
-    named = {inf_name(e['name']): e for e in entries if e['name']}
+    modules = referenced_modules(args.dxe_inc)
+    wanted = {inf for _, inf in modules}
+    by_inf = {inf_name(e['name']): e for e in entries if e['name']}
+
     drivers = [e for e in entries if e['payload'] and e['name']]
-    print(f'  {len(drivers)} named drivers')
+    print(f'  {len(drivers)} named modules in the image, {len(modules)} referenced by {args.dxe_inc.name}')
     for e in sorted(drivers, key=lambda e: inf_name(e['name'])):
         shown = inf_name(e['name'])
         renamed = f'  (UI name {e["name"]})' if shown != e['name'] else ''
-        marker = '' if shown in EXPECTED else '   (not one of the 20)'
-        print(f'    {shown:22s} {len(e["payload"]):7d} bytes  type {e["type"]:#04x}{marker}{renamed}')
+        marker = '' if shown in wanted else '   (not referenced)'
+        print(f'    {shown:24s} {len(e["payload"]):7d} bytes  type {e["type"]:#04x}{marker}{renamed}')
 
-    found = [n for n in EXPECTED if n in named]
-    missing = [n for n in EXPECTED if n not in named]
-    print(f'\n  expected {len(EXPECTED)}: {len(found)} found, {len(missing)} missing')
-    for n in missing:
-        print(f'    missing {n}')
-    if missing and args.require:
-        fail(f'{len(missing)} expected driver(s) are not in this image')
+    found = [(d, i) for d, i in modules if i in by_inf and by_inf[i]['payload']]
+    missing = [(d, i) for d, i in modules if i not in by_inf]
+    bodiless = [(d, i) for d, i in modules if i in by_inf and not by_inf[i]['payload']]
+    print(f'\n  referenced by {args.dxe_inc.name}: {len(found)} recovered, '
+          f'{len(missing)} not in the image, {len(bodiless)} without a module body')
+    for d, i in missing:
+        print(f'    missing {d}/{i}.inf')
+    for d, i in bodiless:
+        print(f'    no body  {d}/{i}.inf')
+    if (missing or bodiless) and args.require:
+        fail(f'{len(missing) + len(bodiless)} referenced module(s) could not be recovered')
 
     if args.out is not None:
         args.out.mkdir(parents=True, exist_ok=True)
-        for name in found:
-            entry = named[name]
-            target = args.out / f'{name}.efi'
-            target.write_bytes(entry['payload'])
-        print(f'  wrote {len(found)} drivers to {args.out}')
+        for _, name in found:
+            (args.out / f'{name}.efi').write_bytes(by_inf[name]['payload'])
+        print(f'  wrote {len(found)} modules to {args.out}')
+
+    if args.layout is not None:
+        root = args.layout / 'Binaries/nx769j/QcomPkg/Drivers'
+        for directory, name in found:
+            write_module(root, directory, name, by_inf[name])
+        print(f'  laid out {len(found)} modules under {root}')
+
+        raw_root = args.layout / 'Binaries/nx769j/RawFiles'
+        by_name = {e['name']: e for e in entries if e['name']}
+        wanted = referenced_raw_files(args.dxe_inc)
+        missing, written = [], 0
+        for name in wanted:
+            entry = by_name.get(name)
+            if entry is None or not entry['payload']:
+                missing.append(name)
+                continue
+            raw_root.mkdir(parents=True, exist_ok=True)
+            (raw_root / name).write_bytes(entry['payload'])
+            written += 1
+        print(f'  laid out {written} raw files under {raw_root}')
+        for name in missing:
+            print(f'    missing {name}')
+        if missing and args.require:
+            fail(f'{len(missing)} referenced raw file(s) are not in this image')
     return 0
 
 

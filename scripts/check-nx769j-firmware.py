@@ -28,30 +28,33 @@ import sys
 import tomllib
 from pathlib import Path
 
-# DXE drivers nx729jPkg/Include/DXE.inc pulls from Binaries/<device>/QcomPkg.
-# Each is an INF path relative to the Binaries root.
-VENDOR_DRIVERS = (
-    'QcomPkg/Drivers/EnvDxe/EnvDxe.inf',
-    'QcomPkg/Drivers/ShmBridgeDxe/ShmBridgeDxeLA.inf',
-    'QcomPkg/Drivers/TzDxe/ScmDxeCompat.inf',
-    'QcomPkg/Drivers/TzDxe/TzDxeLA.inf',
-    'QcomPkg/Drivers/ChipInfoDxe/ChipInfoDxe.inf',
-    'QcomPkg/Drivers/IPCCDxe/IPCCDxe.inf',
-    'QcomPkg/Drivers/PlatformInfoDxe/PlatformInfoDxe.inf',
-    'QcomPkg/Drivers/DALSYSDxe/DALSYSDxe.inf',
-    'QcomPkg/Drivers/HALIOMMUDxe/HALIOMMUDxe.inf',
-    'QcomPkg/Drivers/HWIODxe/HWIODxe.inf',
-    'QcomPkg/Drivers/I2CDxe/I2CDxe.inf',
-    'QcomPkg/Drivers/TLMMDxe/TLMMDxe.inf',
-    'QcomPkg/Drivers/PmicDxe/PmicDxeLa.inf',
-    'QcomPkg/Drivers/UFSDxe/UFSDxe.inf',
-    'QcomPkg/Drivers/CmdDbDxe/CmdDbDxe.inf',
-    'QcomPkg/Drivers/PwrUtilsDxe/PwrUtilsDxe.inf',
-    'QcomPkg/Drivers/RpmhDxe/RpmhDxe.inf',
-    'QcomPkg/Drivers/NpaDxe/NpaDxe.inf',
-    'QcomPkg/Drivers/ULogDxe/ULogDxe.inf',
-    'QcomPkg/Drivers/VcsDxe/VcsDxe.inf',
-)
+def vendor_drivers(uefi: Path, device: Path) -> list[str]:
+    """The vendor modules the firmware needs, read from the platform's includes.
+
+    APRIORI.inc, DXE.inc and RAW.inc all pull from Binaries/<device>, and
+    APRIORI.inc names one that DXE.inc has commented out, so reading one of the
+    three under-counts the set. Some modules are in a family directory that
+    differs from the INF name -- TzDxe/ScmDxeCompat.inf sits beside
+    TzDxe/TzDxeLA.inf, and PmicDxe/PmicDxeLa.inf is not PmicDxeLa/PmicDxeLa.inf.
+    A hardcoded list here held a subset and named the wrong paths for exactly
+    those, so the set comes from the files that state it.
+    """
+    for candidate in (uefi / 'Platforms/ZTE/nx769jPkg/Include',
+                      device / 'firmware/Platforms/ZTE/nx769jPkg/Include'):
+        if not candidate.is_dir():
+            continue
+        out = []
+        for include in sorted(candidate.glob('*.inc')):
+            for line in include.read_text(encoding='utf-8').splitlines():
+                stripped = line.strip()
+                if not stripped.startswith('INF Binaries/'):
+                    continue
+                relative = stripped.split('INF ', 1)[1].strip()
+                marker = 'Binaries/nx769j/'
+                if marker in relative and relative.split(marker, 1)[1] not in out:
+                    out.append(relative.split(marker, 1)[1])
+        return out
+    return []
 
 # Modules the UniXNU boot chain needs, on top of the vendor set.
 UNIXNU_MODULES = (
@@ -188,11 +191,15 @@ def check_modules(uefi: Path, pkg: Path, check: Check) -> None:
         check.require(mapping in dsc_text, f'{mapping} is not mapped; UniXNURamDiskDxe needs it')
 
 
-def check_vendors(uefi: Path, check: Check, require: bool) -> None:
+def check_vendors(uefi: Path, device: Path, check: Check, require: bool) -> None:
     root = uefi / 'Binaries/nx769j'
-    present = [driver for driver in VENDOR_DRIVERS if (root / driver).is_file()]
-    missing = [driver for driver in VENDOR_DRIVERS if driver not in present]
-    check.note(f'vendor DXE drivers: {len(present)}/{len(VENDOR_DRIVERS)} present under {root}')
+    drivers = vendor_drivers(uefi, device)
+    if not drivers:
+        check.problems.append('the platform Include/ directory is missing, so the vendor set is unknown')
+        return
+    present = [driver for driver in drivers if (root / driver).is_file()]
+    missing = [driver for driver in drivers if driver not in present]
+    check.note(f'vendor DXE drivers: {len(present)}/{len(drivers)} present under {root}')
     for driver in missing:
         message = f'vendor driver missing: {driver}'
         if require:
@@ -204,29 +211,77 @@ def check_vendors(uefi: Path, check: Check, require: bool) -> None:
         check.note('  run scripts/extract-files.py to collect them, then rerun with --require-vendors')
 
 
+def is_mu_silicium(path: Path) -> bool:
+    return (path / 'Resources/Scripts/mkbootimg.py').is_file() and (path / 'BootShim/BootShim.S').is_file()
+
+
+def find_uefi(explicit: Path | None, device: Path) -> Path | None:
+    """Locate the Mu-Silicium checkout.
+
+    firmware.py runs a preflight with no arguments and the assembled tree as the
+    working directory, so the path is not handed over; --uefi and UNIXNU_UEFI
+    cover the case where it is. Otherwise the documented layout is
+    `--uefi ../uefi-<device>` beside either checkout, so walk up from both and
+    look there.
+    """
+    if explicit and explicit.is_dir():
+        return explicit
+    env = os.environ.get('UNIXNU_UEFI')
+    if env and Path(env).expanduser().is_dir():
+        return Path(env).expanduser()
+    for start in (Path.cwd(), device):
+        for parent in [start, *start.parents]:
+            candidate = parent / 'uefi-nx769j'
+            if is_mu_silicium(candidate):
+                return candidate
+    return None
+
+
+def find_device(explicit: Path | None) -> Path | None:
+    """Locate the device repository.
+
+    Same reason as find_uefi: the preflight runs from the assembled tree, where
+    HERE.parents[1] is the tree and not the repository. board.toml is the thing
+    being checked against, so look for it beside either checkout.
+    """
+    for candidate in (explicit, HERE.parents[1]):
+        if candidate and (candidate / 'board.toml').is_file():
+            return candidate
+    for start in (Path.cwd(), HERE):
+        for parent in [start, *start.parents]:
+            for name in ('UniXNU-NX769J', '.'):
+                candidate = parent / name
+                if (candidate / 'board.toml').is_file() and (candidate / 'porting.toml').is_file():
+                    return candidate
+    return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--uefi', type=Path,
-                        default=Path(os.environ.get('UNIXNU_UEFI') or ''),
-                        help='the Mu-Silicium checkout (or UNIXNU_UEFI)')
-    parser.add_argument('--device', type=Path, default=HERE.parents[1],
-                        help='this device repository')
+    parser.add_argument('--uefi', type=Path, default=None,
+                        help='the Mu-Silicium checkout; or UNIXNU_UEFI, or found beside either checkout')
+    parser.add_argument('--device', type=Path, default=None,
+                        help='this device repository; found beside either checkout if omitted')
     parser.add_argument('--require-vendors', action='store_true',
                         help='fail when a vendor DXE driver is missing')
     args = parser.parse_args()
 
-    uefi = args.uefi.expanduser()
-    if not str(uefi) or not uefi.is_dir():
-        print('check-nx769j-firmware: give the Mu-Silicium checkout with --uefi or UNIXNU_UEFI',
-              file=sys.stderr)
+    device = find_device(args.device.expanduser() if args.device else None)
+    uefi = find_uefi(args.uefi.expanduser() if args.uefi else None, device or HERE.parents[1])
+    if uefi is None:
+        print('check-nx769j-firmware: cannot find the Mu-Silicium checkout; '
+              'pass --uefi, set UNIXNU_UEFI, or put uefi-nx769j beside the build', file=sys.stderr)
+        return 2
+    if device is None:
+        print('check-nx769j-firmware: cannot find the device repository; pass --device', file=sys.stderr)
         return 2
 
     check = Check()
     pkg = check_layout(uefi, check)
     if pkg is not None:
-        check_agreement(uefi, args.device, check)
+        check_agreement(uefi, device, check)
         check_modules(uefi, pkg, check)
-    check_vendors(uefi, check, args.require_vendors)
+    check_vendors(uefi, device, check, args.require_vendors)
 
     for note in check.notes:
         print(note)
