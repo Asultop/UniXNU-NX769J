@@ -94,6 +94,7 @@ jobs:
       - name: Fetch the iOS 16.5 restore image
         run: |
           set -euo pipefail
+          trap 'echo "::error title=Fetch the restore image::$BASH_COMMAND"' ERR
           {
             echo '## Data seed'
             echo '### Runner disk'
@@ -108,6 +109,7 @@ jobs:
       - name: Extract the OS volume
         run: |
           set -euo pipefail
+          trap 'echo "::error title=Extract the OS volume::$BASH_COMMAND"' ERR
           python3 - <<'PY'
           import hashlib, os, zipfile
           from pathlib import Path
@@ -136,6 +138,7 @@ jobs:
       - name: Mount the OS volume read-only
         run: |
           set -euo pipefail
+          trap 'echo "::error title=Mount the OS volume::$BASH_COMMAND"' ERR
           mkdir -p "$RUNNER_TEMP/os-mount"
           hdiutil attach -readonly -nobrowse -owners off \
             -mountpoint "$RUNNER_TEMP/os-mount" "$RUNNER_TEMP/os/$OS_MEMBER"
@@ -144,6 +147,7 @@ jobs:
         id: seed
         run: |
           set -euo pipefail
+          trap 'echo "::error title=Build the seed::$BASH_COMMAND"' ERR
           python3 device/scripts/build-data-seed.py \
             --os-mount "$RUNNER_TEMP/os-mount" \
             --output "$RUNNER_TEMP/out/nx769j-data.dbr" \
@@ -180,6 +184,8 @@ jobs:
         env:
           ARTIFACT_PASSPHRASE: ${{ secrets.ARTIFACT_PASSPHRASE }}
         run: |
+          set -euo pipefail
+          trap 'echo "::error title=Encrypt::$BASH_COMMAND"' ERR
           if [ -n "$ARTIFACT_PASSPHRASE" ]; then
             tar -C "$RUNNER_TEMP/out" -czf - . \
               | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:ARTIFACT_PASSPHRASE \
