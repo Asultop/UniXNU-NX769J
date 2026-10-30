@@ -4,14 +4,17 @@ These are the files that are new or changed for this board in a Mu-Silicium
 checkout. They are staged here so the firmware design is reviewable and so
 creating the `uefi-nx769j` checkout is a copy rather than an authoring task.
 
-Nothing here is built. Lift the tree across:
+Nothing here is built in this repository; the tree is what gets lifted across.
+`Mu_Basecore`, the edk2 checkout, is a separate submodule and has to be
+initialised as well, because `firmware.py` builds against it rather than against
+a tree of its own:
 
 ```sh
 git clone https://github.com/UniXNU/uefi-sheng uefi-nx769j
 cd uefi-nx769j && git checkout -b nx769j
 cp -R ../UniXNU-NX769J/firmware/* .
 git submodule update --init --depth 1 -- \
-  Common/Mu Common/Mu_OEM_Sample Silicium-ACPI \
+  Common/Mu Common/Mu_OEM_Sample Silicium-ACPI Mu_Basecore \
   Silicon/Silicium/OpensslPkg/Library/OpensslLib/openssl
 ```
 
@@ -29,52 +32,55 @@ Everything the package adds is here, so `cp -R firmware/* .` is the whole step.
 | `Platforms/ZTE/nx769jPkg/nx769j.fdf` | derived from `nx729jPkg/nx729j.fdf` |
 | `Platforms/ZTE/nx769jPkg/{nx769j.dec,DeviceBuild.py}` | `nx729jPkg`'s, renamed |
 | `Platforms/ZTE/nx769jPkg/Include/{APRIORI,DXE,RAW}.inc` | `nx729jPkg/Include/`'s, with the `Binaries/nx729j` paths renamed to `Binaries/nx769j` |
-| `Platforms/ZTE/nx769jPkg/Library/{MemoryMapLib,ConfigurationMapLib}/` | `nx729jPkg/Library/`'s, renamed — **see the warning below** |
+| `Platforms/ZTE/nx769jPkg/Library/MemoryMapLib/` | **this board's map**, rebuilt from the firmware device tree |
+| `Platforms/ZTE/nx769jPkg/Library/ConfigurationMapLib/` | `nx729jPkg/Library/`'s, renamed |
 
 ## Not staged, and why
 
-| File | Why it is not here |
+Both of these come out of the device's own firmware and are not redistributable,
+so they are extracted onto the build machine rather than committed.
+
+| File | How to produce it |
 | --- | --- |
-| `Resources/DTBs/nx769j.dtb` | Extract from the device's `vendor_boot`; not collected. |
-| `Binaries/nx769j/QcomPkg/Drivers/…` | Vendor UEFI DXE drivers. All 20 come out of `uefi.img` with [`scripts/extract-uefi-drivers.py`](../scripts/extract-uefi-drivers.py); what is left is laying them out with their EDK II INF wrappers. Not redistributable, so they cannot be staged here and every build machine extracts them. |
+| `Resources/DTBs/nx769j.dtb` | `python3 scripts/extract-firmware-dtb.py --vendor-boot vendor_boot.img --tree 2 -o Resources/DTBs/nx769j.dtb`. Tree 2 is "Pineapple v2 SoC", which this board matches by `qcom,msm-id`; all four Pineapple trees carry the same reservation set, so the memory map does not depend on the choice. |
+| `Binaries/nx769j/QcomPkg/Drivers/…` | `python3 scripts/extract-uefi-drivers.py --image uefi.img --layout <this checkout>`. All 52 modules the platform includes name come out of `uefi.img`, each written with its EDK II INF wrapper and depex. [`proprietary-files.txt`](../proprietary-files.txt) pins the hash of every one. |
 
 `scripts/check-nx769j-firmware.py` reports exactly which of these are still
 missing and whether they are fatal, and is what `./unixnu build firmware` runs
-before EDK II. Against a fresh `UniXNU/uefi-sheng` checkout plus these files it
-reports the tree as consistent with `board.toml`, with only the vendor drivers
-absent.
+before EDK II. With both present it reports the tree as consistent with
+`board.toml` and `52/52` vendor drivers.
 
-## Warning: the memory map is not this board's
+## The memory map
 
-`MemoryMapLib.c` is nx729j's map with the identifiers renamed. **Do not boot
-firmware built against it.** Three conflicts are already known against sources
-that measured this board:
+`MemoryMapLib.c` is this board's map, rebuilt from the reservation list in
+`vendor_boot.img`'s device tree rather than carried over from `nx729jPkg`. All
+36 fixed-address reservations have a descriptor named after their node, and the
+regions UEFI lays out for itself sit in the free band the board actually has.
 
-| Entry | nx729j's map | NX769J |
-| --- | --- | --- |
-| `HYP` | `0x80000000` / `0x00A00000` | `0x80000000` / `0x00E00000` (`gunyah_hyp_region`) |
-| `Display Reserved` | `0xB8000000` / `0x02B00000` | `0xE3940000` / `0x02B00000` (`splash_region`, `cont_splash_region`) |
-| `TZApps Reserved` | `0xD8800000` / `0x07400000` | overlaps `ramoops@D7E00000` `0xD7E00000` / `0x02000000` |
-
-The data to rebuild it from is no longer missing. The device's flash package
-carries `vendor_boot.img`, whose `dtb` field holds six device trees; four are
-Pineapple variants with byte-identical reservation sets, and
-[`scripts/extract-dtb`](../scripts/extract-firmware-dtb.py) prints all of them.
-The full list — 49 nodes, 36 at fixed addresses — is in
+The full reservation list comes from `vendor_boot.img`, whose `dtb` field holds
+six device trees; four are Pineapple variants with byte-identical reservation
+sets, and [`scripts/extract-firmware-dtb.py`](../scripts/extract-firmware-dtb.py)
+prints all of them. The list is 49 nodes, 36 at fixed addresses, and is in
 [`device-inputs.md`](../device-inputs.md#fw-dtb).
 
-What remains is the mapping itself. nx729j's table is a hand-built hybrid: the
-device tree's fine-grained reservations grouped into coarser descriptors, plus
-UEFI's own regions (`FD Reserved`, `UEFI Stack`, `SEC Heap`, `Sched Heap`,
-`FV Region`, `DXE Heap`) that the device tree knows nothing about. Rebuild it
-from the reservation list rather than editing it piecemeal — moving
-`Display Reserved` alone would leave `0xB8000000..0xBAB00000` unaccounted, and
-the device tree reserves nothing there, which trades a known wrong region for a
-silently unmanaged one.
+It is checked rather than reviewed:
+
+```sh
+python3 scripts/check-memory-map.py --dtb Resources/DTBs/nx769j.dtb
+# check-memory-map: 64 descriptors, 37 fixed reservations, 37 covering one, 0 unexplained
+```
+
+37 rather than 36 because `board.toml [[bootimg.dtb_node]]` adds the contiguous
+splash region to the boot image's device tree, and the script reads that table
+too. The comparison refuses an uncovered reservation, two descriptors fighting
+over one range, a descriptor covering nothing that is not a UEFI region, and any
+DDR descriptor reaching outside DRAM; `scripts/test_check_memory_map.py` covers
+each of those.
 
 A map that reserves the wrong ranges lets the firmware write over what the
-bootloader or TrustZone owns. See the open items in
-[`docs/UEFI-FIRMWARE.md`](../docs/UEFI-FIRMWARE.md).
+bootloader or TrustZone owns, which is why this is a gate and not a note. See
+[`docs/UEFI-FIRMWARE.md`](../docs/UEFI-FIRMWARE.md) for the derivation and for
+what is still open.
 
 ## The one line that is easy to get wrong
 

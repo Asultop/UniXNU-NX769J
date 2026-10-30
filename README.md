@@ -26,10 +26,10 @@ firmware and partition policy. Shared code lives in
 ## Status
 
 The board description, component selection, device tree and kernel
-configuration are complete and sourced. **The kernel builds and links on Linux**:
-XNU 8796 with the 64-patch rebased series, all eleven archive builders, no
-undefined symbols. Hardware bring-up has not run, so there is no device
-verification and no host verification of anything past the build.
+configuration are complete and sourced. **Every image the port needs now
+builds**: the XNU kernel, the UEFI firmware volume, the payload, the userdata
+root image and the boot image. Hardware bring-up has not run, so there is no
+device verification and nothing here has been observed booting.
 
 | Milestone | State |
 | --- | --- |
@@ -37,31 +37,45 @@ verification and no host verification of anything past the build.
 | Kernel compiles and links on Linux | **done** |
 | Prelink produces `kernel/kernel.macho` | **done** — experimental candidate, not runtime-qualified |
 | `build package` produces the UniXNU UEFI drivers | **done** |
-| UEFI firmware package | assembled, preflight-consistent — see [`docs/UEFI-FIRMWARE.md`](docs/UEFI-FIRMWARE.md) |
-| Firmware image, payload, boot image | **blocked on device inputs** — see below |
+| UEFI firmware package | **built** — `SILICIUM_UEFI.fd`, exactly `0x300000` bytes; see [`docs/UEFI-FIRMWARE.md`](docs/UEFI-FIRMWARE.md) |
+| Firmware image, payload, boot image | **built** — see [`docs/FLASHING.md`](docs/FLASHING.md) |
 | Boot on hardware | not attempted |
 
-`./unixnu build kernel` now runs end to end against the iOS 16.5 restore image:
-eleven archive builders, the link, and prelink. The result is an **experimental
+`./unixnu build kernel` runs end to end against the iOS 16.5 restore image:
+eleven archive builders, the link, and prelink. The kernel is an **experimental
 candidate** — `emit_prelink.py` records `instruction_relocation_complete`,
 `abi_qualified`, `loadable` and `runtime_qualified` as false in every plan it
-writes, and those flags have not moved. Nothing here has been observed running.
+writes, and those flags have not moved.
 
-### What is left is device data, not code
+### The images
 
-Every remaining step needs an input that exists only on a device. All four are
-read-only.
+All four are reproducible from the inputs below. Sizes and hashes are from a
+build on Linux with CLANGPDB.
 
-| Input | Needed by | Where it comes from |
+| Image | Bytes | What it is |
 | --- | --- | --- |
-| Reserved-memory list | the UEFI memory map | `ls /proc/device-tree/reserved-memory/` and each node's `reg` |
-| Unique chip ID | `build payload` | the device; the build records it as stored in no repository |
-| Vendor UEFI DXE drivers (20) | `build firmware` | `scripts/extract-files.py` against the device firmware package |
-| Firmware DTB | `bootimg --dtb` | the `dtb` segment of `vendor_boot` |
+| `SILICIUM_UEFI.fd` | 3145728 | the UEFI firmware volume, in the `uefi-nx769j` checkout |
+| `payload/payload.img` | 218103808 | the FAT payload: menu config, kernel, ADT, trust cache |
+| `userdata/userdata-root.img` | 8357150720 | the OS and SystemOS windows |
+| `boot/boot.img` | 220332032 | BootShim + FD + payload + firmware DTB, for `fastboot boot` |
 
-The public firmware dump has the DTBO overlay but no `vendor_boot` and no base
-DTB, so it cannot supply the last one. Until these are collected,
-[`firmware/README.md`](firmware/README.md) says plainly what must not be booted.
+### What the build needs that no repository can hold
+
+Four inputs come from the device's flash package or from the restore image, and
+neither is redistributable. Each has an extraction script and a recorded hash.
+
+| Input | Script | Recorded in |
+| --- | --- | --- |
+| 52 vendor UEFI DXE drivers | `scripts/extract-uefi-drivers.py --image uefi.img --layout ../uefi-nx769j` | `proprietary-files.txt` |
+| Firmware DTB | `scripts/extract-firmware-dtb.py --vendor-boot vendor_boot.img --tree 2` | `proprietary-files.txt` |
+| Unique chip ID | read from the device, then passed as `--unique-chip-id` | [`device-inputs.md`](device-inputs.md#chip-id) |
+| OS trust cache | one of the two the profile pins, passed as `--trust-cache` | `os-profiles/ios-16.5-20F66/profile.toml` |
+
+Two more are read out of what the build already produces: the root volume UUID
+comes from `userdata-root.img` via
+[`scripts/extract-root-volume-uuid.py`](device-inputs.md#root-volume), and the
+root windows' verified-root policy bundle is still to be signed — see
+`porting.toml`.
 
 Every area states its own scope and next step in [`porting.toml`](porting.toml).
 
@@ -75,7 +89,7 @@ device over read-only adb and recorded in
 | Splash reservation | **measured** `0xe3940000` / `0x2b00000`, `cont_splash_region` | `dts/nx769j.dts`, `board.toml` `[[bootimg.dtb_node]]` |
 | Panel geometry | **measured** 1116x2480 | `porting.toml` display area |
 | DRAM base and SKU | **measured** base `0x80000000`, 16 GiB unit | `dts/nx769j.dts` `memory` |
-| OS window APFS volume UUID | **open** — exists only inside the installed iPadOS image | `board.toml` `payload.adt.root_match_volume_uuid` |
+| OS window APFS volume UUID | **read** `97A3EB1A-5218-4936-BC85-9574EC2C8CC9` | `board.toml` `payload.adt.root_match_volume_uuid` |
 
 Re-run the commands in [`device-inputs.md`](device-inputs.md) before writing
 anything to a device: the recorded GPT extents describe one unit at one point

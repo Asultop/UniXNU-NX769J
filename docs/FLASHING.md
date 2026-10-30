@@ -13,13 +13,17 @@ writes nothing; the step that does write is called out explicitly below.
 | XNU kernel | **built** | `./unixnu build kernel` produces `mach.development.bcm2837` |
 | OS profile pins | **filled** | `os-profiles/ios-16.5-20F66/profile.toml`, extracted from the iOS 16.5 restore image |
 | Board hardware values | **filled** | `device-inputs.md`, measured read-only on the device |
-| `uefi-nx769j` firmware package | **missing** | Mu-Silicium platform package; see the firmware area of `porting.toml` |
-| Firmware DTB | **missing** | extract from the device `vendor_boot` |
-| `payload.text_fixups` | **missing** | derived from the dyld shared cache inside the OS image |
-| `payload.adt.root_match_volume_uuid` | **missing** | the APFS volume UUID of the OS window once installed |
+| `uefi-nx769j` firmware package | **built** | `./unixnu build firmware`, `SILICIUM_UEFI.fd` at exactly `0x300000` |
+| Vendor UEFI DXE drivers (52) | **extracted** | `scripts/extract-uefi-drivers.py --layout`, hashes in `proprietary-files.txt` |
+| Firmware DTB | **extracted** | `scripts/extract-firmware-dtb.py --vendor-boot … --tree 2` |
+| `payload.adt.root_match_volume_uuid` | **filled** | `scripts/extract-root-volume-uuid.py` reads it out of the OS window |
+| `payload.text_fixups` | **empty** | an honest empty list; add one only when a boot fails on one |
+| `payload.adt.unique_chip_id` | **required on the command line** | the SoC serial, recorded in [`device-inputs.md`](../device-inputs.md#chip-id) |
 
-Only the firmware package, the firmware DTB and the two payload inputs are still
-open. Everything else that the image assembly consumes is in place.
+The two remaining inputs are the platform seed and the trust cache, both passed
+at build time rather than stored in the configuration: `--unique-chip-id` is
+per-device, and the restore image is not redistributable so `--ipsw` and
+`--trust-cache` take a local path.
 
 ## 1. Build the parts
 
@@ -31,27 +35,48 @@ From the UniXNU checkout, in order, checking each output before continuing:
 ./unixnu build kernel   -D ../UniXNU-NX769J
 ./unixnu build package  -D ../UniXNU-NX769J
 ./unixnu build firmware -D ../UniXNU-NX769J --uefi ../uefi-nx769j
-./unixnu build payload  -D ../UniXNU-NX769J
-./unixnu build userdata -D ../UniXNU-NX769J    # only when the root image is being replaced
+./unixnu build userdata -D ../UniXNU-NX769J --ipsw <restore.ipsw>
+./unixnu build payload  -D ../UniXNU-NX769J --uefi ../uefi-nx769j --ipsw <restore.ipsw> \
+  --unique-chip-id 8abc5430 --trust-cache <096-04088-077.dmg.trustcache>
+./unixnu bootimg -D ../UniXNU-NX769J --uefi ../uefi-nx769j \
+  --dtb ../uefi-nx769j/Resources/DTBs/nx769j.dtb \
+  -o out/nx769j/ios-16.5-20F66/nx769j/boot/boot.img
 ```
 
+`build userdata` comes before `build payload` here because
+`scripts/extract-root-volume-uuid.py` reads the root volume UUID out of the
+userdata image it writes. If `board.toml` already carries the value the order
+does not matter.
+
 On Linux the kernel step uses the UniXNU open source Mach-O toolchain rather
-than Xcode; `scripts/linux/setup-toolchain.py` installs it. `CCACHE` is free in
+than Xcode; `scripts/linux/setup-toolchain.py` installs it. Put its `bin`
+directory on `PATH` for the image steps too: `build userdata` decodes LZFSE
+chunks with the `lzfse` tool the same installer provides. `CCACHE` is free in
 the XNU makefiles and `scripts/compile-records.py` uses it to record every
 compile, which the component archive builders need.
 
 Outputs land under `out/nx769j/ios-16.5-20F66/nx769j/`. This repository's
 `package/` appears in the assembled tree as `kits/nx769j`.
 
+| Output | Size | What it is |
+| --- | --- | --- |
+| `firmware` step's `SILICIUM_UEFI.fd` | 3145728 | the UEFI firmware volume, in the Mu-Silicium checkout |
+| `userdata/userdata-root.img` | 8357150720 | the OS and SystemOS windows, ready for `fastboot flash userdata` |
+| `payload/payload.img` | 218103808 | the FAT payload: menu config, kernel, ADT, trust cache |
+| `boot/boot.img` | 220332032 | the whole thing, what `fastboot boot` takes |
+
 ## 2. Pack the boot image
 
 ```sh
 ./unixnu bootimg -D ../UniXNU-NX769J --uefi ../uefi-nx769j \
-  --dtb <device tree> -o out/nx769j/ios-16.5-20F66/nx769j/boot/boot.img
+  --dtb ../uefi-nx769j/Resources/DTBs/nx769j.dtb \
+  -o out/nx769j/ios-16.5-20F66/nx769j/boot/boot.img
 ```
 
 `unixnu bootimg` round-trips the image and fails if any part does not match its
-input, so a successful run is itself the check.
+input, so a successful run is itself the check. It writes `boot.json` beside the
+image, recording the SHA-256 of the FD it packed and of the DTB it appended —
+those two are what tie the image back to the firmware and to the device.
 
 The image contains:
 
