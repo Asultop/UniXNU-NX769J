@@ -88,7 +88,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/ipsw
-          key: ipsw-iPhone10,3-16.5-20F66-${{ env.IPSW_SHA256 }}
+          # Cache keys cannot contain a comma, which rules out the product type
+          # iPhone10,3. The build and the whole-image hash identify it instead.
+          key: ipsw-20F66-${{ env.IPSW_SHA256 }}
 
       - name: Fetch the iOS 16.5 restore image
         if: steps.cache.outputs.cache-hit != 'true'
