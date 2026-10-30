@@ -2,9 +2,9 @@ name: Data seed
 
 # The writable Data volume's seed for the payload (unixnu build payload
 # --data-ramdisk), built on a hosted macOS runner because every step needs
-# hdiutil and diskutil apfs: scripts/build-data-seed.py makes an APFS volume
-# holding the iOS 16.5 OS volume's initial /private/var, grows its container to
-# size_mib, and packs it with DarwinBoot's DBRDISK1 writer.
+# hdiutil and diskutil apfs: scripts/build-data-seed.py makes an APFS volume at
+# the requested size holding the iOS 16.5 OS volume's initial /private/var, and
+# packs it with DarwinBoot's DBRDISK1 writer.
 #
 # UniXNU's own prepare-owner-data-fixture.py and seed-data-grow.py cannot do
 # this port: the first refuses any OS mount whose sbin/launchd does not hash to
@@ -133,6 +133,7 @@ jobs:
       - name: Build the seed
         id: seed
         run: |
+          set -euo pipefail
           python3 device/scripts/build-data-seed.py \
             --os-mount "$RUNNER_TEMP/os-mount" \
             --output "$RUNNER_TEMP/out/nx769j-data.dbr" \

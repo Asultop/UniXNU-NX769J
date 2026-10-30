@@ -14,12 +14,14 @@ Every step needs macOS: `hdiutil` formats and attaches the container and
 `diskutil apfs resizeContainer` grows it. Run it there, or let
 `.github/workflows/data-seed.yml` run it on a hosted macOS runner.
 
-  1. a 32 MiB APFS volume named OwnerData, holding the OS volume's
-     `private/var` without `staged_system_apps`, plus the empty directories the
-     userland expects to find
-  2. grown to --size-mib by extending the raw image and resizing the container,
-     which leaves the volume and its UUID in place
-  3. packed with DarwinBoot's DBRDISK1 writer, so only the non-zero pages travel
+  1. an APFS volume named OwnerData at the size asked for, holding the OS
+     volume's `private/var` without `staged_system_apps`, plus the empty
+     directories the userland expects to find
+  2. packed with DarwinBoot's DBRDISK1 writer, so only the non-zero pages travel
+
+The container is created at its final size rather than grown into it: APFS lays
+its metadata out differently at 32 MiB and at 256 MiB, and growing from the
+smaller one is an extra round of attach and resize for no benefit here.
 
 The volume UUID is new on every run, so it goes in the report and the kernel
 takes whatever volume is on the seed window rather than looking one up.
@@ -35,7 +37,6 @@ import hashlib
 import json
 import os
 import plistlib
-import re
 import shutil
 import stat
 import subprocess
@@ -43,7 +44,9 @@ import sys
 from pathlib import Path
 
 MIB = 1024 * 1024
-INITIAL_MIB = 32
+# APFS spends a noticeable part of a small container on its own metadata, so a
+# seed is only worth building when the tree it holds is comfortably smaller.
+FILL_LIMIT = 0.85
 # The userland expects these under the Data root even when the OS image has none.
 EMPTY_DIRS = ('keybags', 'mobile/tmp', 'tmp', 'run')
 # Copied into the seed but huge and replaceable on first boot.
@@ -111,19 +114,23 @@ def attached_device(attach: dict) -> str:
     return attach['system-entities'][0]['dev-entry']
 
 
-def container_for(store: str) -> str:
-    listing = plistlib.loads(subprocess.check_output(['diskutil', 'apfs', 'list', '-plist']))
-    for entry in listing['Containers']:
-        if any(p.get('DeviceIdentifier') == store for p in entry.get('PhysicalStores', [])):
-            return entry['ContainerReference']
-    fail(f'no APFS container found on the attached seed at {store}')
+def tree_bytes(source: Path) -> int:
+    """How much of private/var would actually be copied."""
+    total = 0
+    for current, dirs, files in os.walk(source, followlinks=False):
+        dirs[:] = [name for name in dirs if name not in SKIP_DIRS]
+        for name in files:
+            here = Path(current) / name
+            if here.is_file() and not here.is_symlink():
+                total += here.stat().st_size
+    return total
 
 
 def verify_container(image: Path, size_mib: int) -> int:
-    """The grown container must fill the image, within the 64 MiB slack APFS leaves."""
+    """The image must start with an APFS container that fills it."""
     header = image.open('rb').read(4096)
     if header[32:36] != b'NXSB':
-        fail('the grown image does not start with an APFS container')
+        fail('the image does not start with an APFS container')
     block_size = int.from_bytes(header[36:40], 'little')
     blocks = int.from_bytes(header[40:48], 'little')
     target = size_mib * MIB
@@ -147,8 +154,8 @@ def main() -> int:
                         help='scratch directory (default: beside --output)')
     args = parser.parse_args()
 
-    if args.size_mib < INITIAL_MIB:
-        fail(f'--size-mib {args.size_mib} is below the {INITIAL_MIB} MiB the seed is created at')
+    if args.size_mib < 32:
+        fail(f'--size-mib {args.size_mib} is too small to hold an APFS container')
     if args.output.exists():
         fail(f'{args.output} exists; this tool never overwrites a seed')
 
@@ -156,6 +163,15 @@ def main() -> int:
     if not source.is_dir():
         fail(f'{source} is not a directory')
     launchd_hash = check_mount(source)
+
+    tree = source / 'private/var'
+    needed = tree_bytes(tree)
+    budget = args.size_mib * MIB
+    print(f'build-data-seed: private/var holds {needed} bytes to copy, '
+          f'the container is {budget} bytes')
+    if needed > budget * FILL_LIMIT:
+        fail(f'private/var is {needed} bytes and --size-mib {args.size_mib} gives {budget} '
+             f'before APFS metadata; raise --size-mib')
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     work = (args.work or args.output.parent / 'data-seed-work').resolve()
@@ -166,8 +182,10 @@ def main() -> int:
         fail(f'{image} exists; clear the scratch directory first')
     packer = packed_ramdisk(args.unixnu.resolve() if args.unixnu else None)
 
-    run('hdiutil', 'create', '-size', f'{INITIAL_MIB}m', '-layout', 'NONE', '-fs', 'APFS',
+    run('hdiutil', 'create', '-size', f'{args.size_mib}m', '-layout', 'NONE', '-fs', 'APFS',
         '-volname', 'OwnerData', '-type', 'UDTO', str(image))
+    if not image.is_file():
+        fail(f'hdiutil did not write {image}')
     mount.mkdir(exist_ok=True)
     attached = plistlib.loads(subprocess.check_output(
         ['hdiutil', 'attach', '-nobrowse', '-owners', 'off', '-mountpoint', str(mount),
@@ -187,21 +205,6 @@ def main() -> int:
         os.chmod(mount / 'tmp', 0o1777)
     finally:
         subprocess.run(['hdiutil', 'detach', device], check=True)
-
-    # Grow: extend the raw image, then ask APFS to fill it. The volume and its
-    # UUID survive, which is why this is a resize and not a reformat.
-    with image.open('r+b') as handle:
-        handle.truncate(args.size_mib * MIB)
-    listing = run('hdiutil', 'attach', '-imagekey', 'diskimage-class=CRawDiskImage',
-                  '-nomount', '-nobrowse', str(image))
-    store = re.match(r'(/dev/disk\d+)', listing)
-    if not store:
-        fail(f'could not find the store device in {listing!r}')
-    store = store.group(1).rsplit('/', 1)[1]
-    try:
-        run('diskutil', 'apfs', 'resizeContainer', container_for(store), '0')
-    finally:
-        subprocess.run(['hdiutil', 'detach', store, '-force'], capture_output=True)
 
     container_bytes = verify_container(image, args.size_mib)
     metadata = packer.pack(image, args.output)
