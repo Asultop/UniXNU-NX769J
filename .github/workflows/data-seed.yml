@@ -23,6 +23,14 @@ name: Data seed
 #     -in data-seed.tar.gz.enc -pass file:KEYFILE | tar xz
 
 on:
+  # Also runs when the seed tooling changes, so pushing an update to it produces
+  # a seed without needing a token to trigger workflow_dispatch. Every other
+  # push leaves it alone: the job downloads a 6 GiB restore image.
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/data-seed.yml'
+      - 'scripts/build-data-seed.py'
   workflow_dispatch:
     inputs:
       size_mib:
@@ -47,6 +55,10 @@ env:
   # checks it, so a mismatch here stops before anything is mounted.
   IPSW_SHA256: c1091c401f67e3aa7cdfeb2cc19e6c79be3c957aae4e097a019e9ccea07d52f2
   OS_MEMBER: 096-04088-077.dmg
+  # A push has no inputs, so each falls back to the workflow_dispatch default.
+  SIZE_MIB: ${{ inputs.size_mib || '256' }}
+  IPSW_URL: ${{ inputs.ipsw_url || 'https://updates.cdn-apple.com/2023SpringFCS/fullrestores/032-85130/6AB0D10A-8AF9-4F6C-8CF5-A1B315CABE88/iPhone10,3,iPhone10,6_16.5_20F66_Restore.ipsw' }}
+  UNIXNU_REF: ${{ inputs.unixnu_ref || 'main' }}
 
 jobs:
   seed:
@@ -63,7 +75,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: UniXNU/UniXNU
-          ref: ${{ inputs.unixnu_ref }}
+          ref: ${{ env.UNIXNU_REF }}
           path: unixnu
           persist-credentials: false
 
@@ -82,7 +94,7 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
           mkdir -p "$RUNNER_TEMP/ipsw"
-          curl -fSL --retry 3 --retry-delay 5 -o "$RUNNER_TEMP/ipsw/restore.ipsw" "${{ inputs.ipsw_url }}"
+          curl -fSL --retry 3 --retry-delay 5 -o "$RUNNER_TEMP/ipsw/restore.ipsw" "$IPSW_URL"
           echo "$IPSW_SHA256  $RUNNER_TEMP/ipsw/restore.ipsw" | shasum -a 256 -c -
 
       - name: Extract the OS volume
@@ -122,14 +134,14 @@ jobs:
           python3 device/scripts/build-data-seed.py \
             --os-mount "$RUNNER_TEMP/os-mount" \
             --output "$RUNNER_TEMP/out/nx769j-data.dbr" \
-            --size-mib "${{ inputs.size_mib }}" \
+            --size-mib "$SIZE_MIB" \
             --unixnu unixnu \
             --work "$RUNNER_TEMP/seed-work" | tee "$RUNNER_TEMP/out/build-data-seed.log"
           uuid=$(python3 -c "import json,os;print(json.load(open(os.environ['RUNNER_TEMP']+'/out/nx769j-data.dbr.json'))['volume_uuid'])")
           {
             echo "device $(git -C device rev-parse HEAD)"
             echo "unixnu $(git -C unixnu rev-parse HEAD)"
-            echo "size_mib ${{ inputs.size_mib }}"
+            echo "size_mib $SIZE_MIB"
             echo "volume_uuid $uuid"
             echo "ipsw $IPSW_SHA256"
             echo "os_member $(python3 -c "import hashlib,os;print(hashlib.sha256(open(os.environ['RUNNER_TEMP']+'/os/'+os.environ['OS_MEMBER'],'rb').read()).hexdigest())")"
