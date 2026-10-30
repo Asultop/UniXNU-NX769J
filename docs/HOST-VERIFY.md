@@ -1,0 +1,146 @@
+# Host verification
+
+What has been run on a host, at which commit, with what result. UniXNU's
+[completion levels](https://unixnu.com/porting/records#completion-levels) call
+this the evidence a `host-verified` area needs: a command, the full source
+commit, the result, and a log that can be reached. This file is that log.
+
+Every entry below is a build, not a boot. Nothing here has been observed running
+on the NX769J; `device-verified` needs a device command and a device log, and no
+area claims one.
+
+Host: Linux (WSL 2, Ubuntu 24.04), Python 3.12, the UniXNU Linux toolchain at
+`~/.local/unixnu-linux` for `clang`, `lld-link` and `lzfse`, `dtc` and `mtools`
+from the distribution.
+
+## Revision
+
+All four steps below ran at device-repository commit
+[`dd97bc4b307f77df2f6189b7c92881133cc24ac3`](https://github.com/Asultop/UniXNU-NX769J/tree/dd97bc4b307f77df2f6189b7c92881133cc24ac3).
+The inputs they read are pinned elsewhere and unchanged by this file:
+
+| Input | Pin |
+| --- | --- |
+| XNU | `xnu-8796.101.5` at `aca3beaa3dfbd42498b42c5e5ce20a938e6554e5` |
+| Restore image | `iPhone10,3,iPhone10,6_16.5_20F66_Restore.ipsw`, sha256 `c1091c40…7d52f2` |
+| OS member | `096-04088-077.dmg`, sha256 `64354ba3…a3f290` |
+| SoC source | `UniXNU-sm8550-common` at `23b2049fcd9e30356161def84231334fb55ecca9` |
+| Mu-Silicium | `UniXNU/uefi-sheng` branch `sheng`, `nx769jPkg` staged from [`firmware/`](../firmware) |
+| Vendor DXE drivers | 52 modules from `uefi.img`, sha256 `862c3c1a…900e804`, each pinned in [`proprietary-files.txt`](../proprietary-files.txt) |
+
+## Resolution
+
+```sh
+./unixnu status --json -D ../UniXNU-NX769J
+python3 scripts/porting-record.py check --device ../UniXNU-NX769J
+```
+
+| Result | Value |
+| --- | --- |
+| Patch series | resolves to the 64 entries of `patches/xnu/series`, in order |
+| Components | every selected component resolves to a pinned revision |
+| Record | `nx769j: 13 structured areas checked` |
+| Repository | `scripts/check-repository.py` reports the structure consistent |
+
+## Firmware
+
+```sh
+./unixnu build firmware -D ../UniXNU-NX769J --uefi ../uefi-nx769j
+```
+
+| Result | Value |
+| --- | --- |
+| Output | `Build/nx769jPkg/DEBUG_CLANGPDB/FV/SILICIUM_UEFI.fd` |
+| Size | 3145728 bytes = `0x300000`, exactly `[uefi_fd] size` |
+| SHA-256 | `b06906387e20df18f2eef45267ccc11160af4b3ed8e30887a4b1c6d4df7a4fbc` |
+| Preflight | `scripts/check-nx769j-firmware.py` reports `52/52 present`, tree consistent with `board.toml` |
+
+The log exporter is in the volume: `AdvancedLogDxe.inf` builds as its own FFS,
+`GenFfs` names it `8D4E7F50-3A2C-4C9A-9E1B-50C4C8472D41`, and
+`FV/FVMAIN.inf` lists it, so it rides in the compressed `FvMain`. A byte scan of
+the FD does not find its GUID or name for that reason; the FV manifest is what
+shows it.
+
+## userdata root image
+
+```sh
+./unixnu build userdata -D ../UniXNU-NX769J --ipsw <restore.ipsw>
+```
+
+| Result | Value |
+| --- | --- |
+| Output | `out/nx769j/ios-16.5-20F66/nx769j/userdata/userdata-root.img` |
+| Size | 8357150720 bytes (7.78 GiB) in a partition of 494387671040 bytes |
+| SHA-256 | `818e4e37bc9061ac8f5a2103234adb1c1b945fa1f2f4255ac148731b9ebf2631` |
+| OS window | `096-04088-077.dmg`, 5628790272 bytes at `0x100000`, sha256 `484abb49…2021c8` |
+| SystemOS window | `096-04666-078.dmg`, 2726297600 bytes at `0x14fa00000`, sha256 `2279bf44…afdd3` |
+
+This image is what `scripts/extract-root-volume-uuid.py` reads, and it is
+byte-identical across runs: the two windows are copies of pinned members and the
+header is the same every time.
+
+## Payload
+
+```sh
+./unixnu build payload -D ../UniXNU-NX769J --unique-chip-id 8abc5430 \
+  --uefi ../uefi-nx769j --ipsw <restore.ipsw> --trust-cache <096-04088-077.dmg.trustcache>
+```
+
+| Result | Value |
+| --- | --- |
+| Output | `out/nx769j/ios-16.5-20F66/nx769j/payload/payload.img` |
+| Size | 218103808 bytes (208 MiB) |
+| SHA-256 | `a01c88e13681ff83ba3059c9bf0da00a4cdcceac041af24e28898d753ae1e6f9` |
+| Prelinked kernel | `kernel.macho` sha256 `2458882f89378ac7ead0cfd422d3201e088acdf2a1b4520ba199ff7cbe1819ef` |
+| Trust cache | `df0f60fd05b7c312ad0fddb5c85d8adf97b487e8500518337bc4cbde3ca73ea7`, one of the two the profile pins |
+| Menu | `EFI/UniXNU/unixnu.toml` lists `xnu`, `reset`, `shutdown` and `tools` |
+
+## Boot image
+
+```sh
+./unixnu bootimg -D ../UniXNU-NX769J --uefi ../uefi-nx769j \
+  --dtb ../uefi-nx769j/Resources/DTBs/nx769j.dtb \
+  -o out/nx769j/ios-16.5-20F66/nx769j/boot/boot.img
+```
+
+| Result | Value |
+| --- | --- |
+| Output | `out/nx769j/ios-16.5-20F66/nx769j/boot/boot.img` |
+| Size | 220344320 bytes |
+| SHA-256 | `1b1f22c2513e16ec50463345daa45b2cf8244881d0841b174cdc4b1d6ea38a4a` |
+| Header | `ANDROID!`, `header_version` 0, `pagesize` 4096, kernel at `0x8000`, tags at `0x1e00000` |
+| Packed FD | `fd_sha256` `b06906387e20df18f2eef45267ccc11160af4b3ed8e30887a4b1c6d4df7a4fbc`, the firmware volume above |
+| Packed DTB | `dtb_sha256` `f336a7d70c72b8d4ac9c02c843b58bb49111903da154b012f8ff3c26dc7d38c7` |
+
+`unixnu bootimg` round-trips the image and fails if any part does not match its
+input, so the run is itself the check.
+
+## What these results do and do not show
+
+They show that the four build steps run to completion against the pinned inputs,
+that the firmware volume is exactly the size the board declares, and that the
+image packed into `boot.img` is the firmware that was built. They do not show
+that anything starts, and they do not qualify the kernel:
+`emit_prelink.py` still records `instruction_relocation_complete`,
+`abi_qualified`, `loadable` and `runtime_qualified` as false.
+
+Two of the outputs are not byte-reproducible and should not be expected to be:
+
+| Output | Reproducible | Why |
+| --- | --- | --- |
+| `userdata-root.img` | yes | copies of pinned members in a fixed header |
+| `SILICIUM_UEFI.fd` | **no** | two builds from identical sources gave `f5c3bc8f…` and `b0690638…` |
+| `payload.img`, `boot.img` | **no** | the ADT carries `random-seed` of 64 random bytes, and it carries the FD |
+
+The firmware is supposed to be reproducible — `firmware.py` pins
+`SOURCE_DATE_EPOCH` to the Mu-Silicium commit time — so the two differing FDs
+are an open question rather than an accepted property. The two runs were both
+incremental against a reused `Build/` directory, which is the first thing to
+rule out: build twice from a clean `Build/` and compare.
+
+## The Data seed
+
+Not built on this host: every step needs `hdiutil` and `diskutil apfs`.
+`.github/workflows/data-seed.yml` runs `scripts/build-data-seed.py` on a hosted
+macOS runner instead and uploads the seed as an artifact. Its run, the volume
+UUID it reports and the seed hash belong in this file once one completes.
