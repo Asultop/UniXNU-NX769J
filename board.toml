@@ -132,9 +132,9 @@ windows = [
   { name = "SystemOS", component = "Cryptex1,SystemOS" },
 ]
 
-# payload.adt.root_match_volume_uuid is the one board input still open: it is
-# the APFS volume UUID inside the OS window, which only exists once the iPadOS
-# image is installed. Read it from that volume and set it here.
+# payload.adt.root_match_volume_uuid is read out of the OS window of the built
+# userdata image, which is where the APFS root volume actually lives. It is not
+# a value to guess: scripts/extract-root-volume-uuid.py reads it.
 
 [firmware]
 # The uefi-nx769j Mu-Silicium platform package. Modelled directly on
@@ -237,10 +237,12 @@ kernel_args = ["-v", "serial=3"]
 chip_id = "207"
 owned_memory_size = "0x80000000"
 # The APFS volume UUID inside the OS window. The UFS block class publishes the
-# window, the partition scheme publishes the volume and XNU matches it. Read it
-# from the installed OS image before the first boot:
-#   diskutil info <the OS window's APFS volume> | grep "Volume UUID"
-root_match_volume_uuid = "REQUIRED_ROOT_VOLUME_UUID"
+# window, the partition scheme publishes the volume and XNU matches it. This one
+# is read out of the OS window's own volume superblock by
+# scripts/extract-root-volume-uuid.py; see device-inputs.md under "Root volume".
+# It is the volume UUID, not the container UUID -- the container's nx_uuid is
+# c155fa03-68f4-42b0-8117-1915b6aa8e4c and matches no mountable IOMedia.
+root_match_volume_uuid = "97A3EB1A-5218-4936-BC85-9574EC2C8CC9"
 cpu_regs = "0"
 psci_method = "smc"
 packed_data_ramdisk = true

@@ -25,6 +25,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import fdt  # noqa: E402  the scripts directory is not a package
+
 MAGIC = b'VNDRBOOT'
 DTB_MAGIC = 0xd00dfeed
 
@@ -59,89 +62,27 @@ def trees(blob: bytes) -> list[tuple[int, bytes]]:
     return out
 
 
-FDT_BEGIN_NODE = 1
-FDT_END_NODE = 2
-FDT_PROP = 3
-FDT_NOP = 4
-FDT_END = 9
-
-
 def fail(message: str) -> None:
     raise SystemExit('extract-firmware-dtb: ' + message)
-
-
-def walk(blob: bytes):
-    """Yield (path, {property: bytes}) once per node of a flattened device tree."""
-    (_, _, off_struct, off_strings) = struct.unpack_from('>5I', blob, 0)[:4]
-    if off_struct >= len(blob) or off_strings >= len(blob):
-        fail('implausible flattened device tree header offsets')
-    stack: list[str] = []
-    current: tuple[str, dict] | None = None
-    at = off_struct
-
-    while at + 4 <= len(blob):
-        token, = struct.unpack_from('>I', blob, at)
-        at += 4
-        if token == FDT_BEGIN_NODE:
-            if current is not None:
-                yield current
-            end = blob.index(b'\0', at)
-            name = blob[at:end].decode('utf-8', 'replace')
-            at = (end + 1 + 3) & ~3
-            stack.append(name)
-            current = ('/' + '/'.join(stack[1:]), {})
-        elif token == FDT_END_NODE:
-            if current is not None:
-                yield current
-                current = None
-            if stack:
-                stack.pop()
-        elif token == FDT_PROP:
-            length, nameoff = struct.unpack_from('>II', blob, at)
-            at += 8
-            value = blob[at:at + length]
-            at = (at + length + 3) & ~3
-            end = blob.index(b'\0', off_strings + nameoff)
-            prop = blob[off_strings + nameoff:end].decode('utf-8', 'replace')
-            if current is not None:
-                current[1][prop] = value
-        elif token == FDT_NOP:
-            continue
-        else:
-            break
-    if current is not None:
-        yield current
 
 
 def describe(blob: bytes) -> dict:
     """Model, compatible and the reserved-memory children of one tree."""
     model = compatible = ''
-    reservations: list[str] = []
-    in_reserved = False
-    for path, props in walk(blob):
+    try:
+        nodes = list(fdt.walk(blob))
+    except (fdt.FdtError, ValueError) as error:
+        fail(f'this device tree cannot be read: {error}')
+    for path, props in nodes:
         if path == '/' and 'model' in props:
             model = props['model'].split(b'\0')[0].decode('utf-8', 'replace')
         if path == '/' and 'compatible' in props:
             compatible = ' '.join(x.decode('utf-8', 'replace')
                                   for x in props['compatible'].split(b'\0') if x)
-        if path == '/reserved-memory':
-            in_reserved = True
-            continue
-        if in_reserved and path.startswith('/reserved-memory/'):
-            name = path.rsplit('/', 1)[1]
-            if 'reg' in props:
-                reg = props['reg']
-                words = struct.unpack('>%dI' % (len(reg) // 4), reg[:len(reg) // 4 * 4])
-                if len(words) >= 4:
-                    reservations.append(f'{name:28s} 0x{(words[0] << 32) | words[1]:08x} / 0x{(words[2] << 32) | words[3]:x}')
-                elif len(words) >= 2:
-                    reservations.append(f'{name:28s} 0x{words[0]:08x} / 0x{words[1]:x}')
-            elif 'size' in props:
-                reservations.append(f'{name:28s} (size only, no reg)')
-        elif in_reserved and not path.startswith('/reserved-memory'):
-            in_reserved = False
+    reservations = [str(r) for r in fdt.reservations(blob)]
     return {'model': model or '(none)', 'compatible': compatible or '(none)',
-            'reservations': [f'reserved-memory  {r}' for r in reservations] or ['reserved-memory  (none)']}
+            'reservations': [f'reserved-memory  {r}' for r in reservations]
+            or ['reserved-memory  (none)']}
 
 
 def main() -> int:

@@ -306,11 +306,55 @@ Input devices registered by the kernel:
 Eight SCSI devices are published: LUNs `0` through `4`, plus the UFS well-known
 LUNs `49456` (RPMB), `49476` and `49488` (boot).
 
+### Root volume UUID {#root-volume}
+
+`payload.adt.root_match_volume_uuid` is the UUID XNU matches a root against. The
+ADT generator writes it to `/chosen/root-matching` as an IOKit dictionary over
+`IOMedia`, the UFS block class publishes the userdata window, the partition
+scheme publishes the volume, and XNU picks the IOMedia whose UUID matches.
+
+It is the **volume** UUID, not the container's. The two are easy to confuse and
+only one is mountable:
+
+| UUID | What it is | Matches |
+| --- | --- | --- |
+| `97A3EB1A-5218-4936-BC85-9574EC2C8CC9` | the APFS root volume of the OS window | the volume's `IOMedia`, which is what mounts |
+| `c155fa03-68f4-42b0-8117-1915b6aa8e4c` | the OS window container's `nx_uuid` | the synthesized whole-disk `IOMedia`, which is not a root |
+
+`diskutil apfs list` on the attached OS image reports the first of these as the
+volume's Volume UUID. The value set in `board.toml` is the first.
+
+It is read out of the image the build flashes, so it does not need a device:
+
+```sh
+python3 scripts/extract-root-volume-uuid.py \
+  out/nx769j/ios-16.5-20F66/nx769j/userdata/userdata-root.img
+```
+
+| Window | Container | Volume | Seen in |
+| --- | --- | --- | --- |
+| OS | `0x104400`, 5628755968 bytes | `97A3EB1A-5218-4936-BC85-9574EC2C8CC9` | 9 superblock copies |
+| SystemOS | `0x14fa00000`, 2726297600 bytes | `556915A0-5005-4DE5-B3E4-6B489DBB4C1A` | 5 superblock copies |
+
+The OS window is the root: it holds `096-04088-077.dmg`, the image with the dyld
+shared cache and the prelinked kext set, and `board.toml [userdata].windows`
+names it `OS`. `SystemOS` is the cryptex. A third container appears in the
+report at `0x2a8b41b`; the script marks it embedded, and it is a disk image
+file inside the OS volume rather than the window's own container.
+
+APFS keeps several copies of a volume superblock through its checkpoint area, so
+one volume appears more than once in a scan. Every copy carries the same UUID,
+which is what the `Seen in` column shows.
+
 ## Still not measured
+
+Nothing from the boot, storage, display, input or GPU areas. The values below
+are open but none of them is on the device.
 
 | Value | Why | How to get it |
 | --- | --- | --- |
-| OS window APFS volume UUID | Lives inside the installed iPadOS image, not on the running Android system | Read it from the OS window's APFS volume once the image is installed, then set `payload.adt.root_match_volume_uuid` |
+| Verified-root policy bundle | Policy data signed by the owner, not a device value; `scripts/build-verified-root.py` generates an empty table, so root verification is disabled rather than approximated | Produce the signed bundle over the root windows of the OS image that gets flashed |
+| `payload.text_fixups` | A specific byte change in the dyld shared cache, chosen to bypass whatever turns out to be in the way; not derivable from the IPSW container | Derive one when a boot gets far enough to fail on one |
 
 ## Commands used
 

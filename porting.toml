@@ -22,7 +22,7 @@ next_action = ["Compare the effective status output whenever a profile, source o
 [[area.evidence]]
 kind = "source"
 reference = "board.toml"
-result = "Board configuration, component selection, defconfig and patch order described in this section, and now [firmware.defines] -- the four values DeviceBuild.py would otherwise set. firmware.py drives EDK II build directly and so bypasses Mu-Silicium's build driver; an undefined ENABLE_SECUREBOOT reaches SecureBootHandlerLib as an empty token and fails the preprocessor"
+result = "Board configuration, component selection, defconfig and patch order described in this section; [firmware.defines] for the EDK II build, and [payload.adt].root_match_volume_uuid, which is the APFS volume UUID of the OS window read out of the restore image (7z reports it as the APFS volume ID: c155fa03-68f4-42b0-8117-1915b6aa8e4c) -- the four values DeviceBuild.py would otherwise set. firmware.py drives EDK II build directly and so bypasses Mu-Silicium's build driver; an undefined ENABLE_SECUREBOOT reaches SecureBootHandlerLib as an empty token and fails the preprocessor"
 
 [[area.evidence]]
 kind = "source"

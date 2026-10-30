@@ -210,34 +210,66 @@ an equivalent of:
 | `UFSDxe` | Internal storage — the block path XNU's root depends on |
 | `CmdDbDxe`, `PwrUtilsDxe`, `RpmhDxe`, `NpaDxe`, `ULogDxe`, `VcsDxe` | RPMh power and logging |
 
-These are extracted from the device's own firmware. [`proprietary-files.txt`](../proprietary-files.txt)
-records the inventory and hashes; `scripts/extract-files.py` performs the
-extraction. **They are not redistributable**, so `uefi-nx769j` cannot ship them —
-they have to be extracted onto the machine doing the build.
+`APRIORI.inc`, `DXE.inc` and `RAW.inc` between them name **52** modules, and all
+52 come out of the device's own `uefi.img`. That image is an outer firmware
+volume holding only SEC and a platform configuration, with the DXE drivers in
+gzip-compressed nested volumes inside it. Twelve carry a UI section name that
+differs from the INF name the DSC uses — `I2CDxe`'s module is called plain `I2C`,
+`TLMMDxe`'s is `DALTLMM` — so
+[`scripts/extract-uefi-drivers.py`](../scripts/extract-uefi-drivers.py) maps
+them by name rather than guessing by prefix. The expected set is read out of the
+three include files rather than kept in step with them, because `APRIORI.inc`
+names one module that `DXE.inc` has commented out.
+
+```sh
+python3 scripts/extract-uefi-drivers.py --image uefi.img            # list
+python3 scripts/extract-uefi-drivers.py --image uefi.img --layout ../uefi-nx769j
+# referenced by Include: 52 recovered, 0 not in the image, 0 without a module body
+```
+
+`--layout` writes `Binaries/nx769j/QcomPkg/Drivers/<family>/<name>.inf`, the
+`.efi` and its `.depex`, and the three raw files under `Binaries/nx769j/RawFiles`.
+Every module is a prebuilt binary wrapped in an EDK II INF; the wrapper's GUID is
+derived from the INF name, and it does not have to be the one Device-Binaries
+picked.
+
+**They are not redistributable**, so `uefi-nx769j` cannot ship them and every
+build machine runs the extraction. [`proprietary-files.txt`](../proprietary-files.txt)
+records the hash of each extracted module, so a truncated or wrong extraction is
+caught before EDK II runs.
 
 `preflight = ["scripts/check-nx769j-firmware.py"]` exists to make a missing or
-wrong vendor binary fail before EDK II runs rather than mid-build.
+wrong vendor binary fail before EDK II runs rather than mid-build. With the
+extraction done it reports `52/52 present`; `--require-vendors` makes a missing
+one fatal.
 
 ## Memory map
 
 `Library/MemoryMapLib/MemoryMapLib.c` is the board's UEFI memory map and is the
-most hardware-specific file in the package. The one staged here is nx729j's with
-the identifiers renamed, and **it is not this board's map** — see the warning in
-[`firmware/README.md`](../firmware/README.md).
+most hardware-specific file in the package. It is rebuilt from this board's own
+firmware device tree, not carried over from nx729j.
 
-Where the two agree, and where they do not:
+Each of the 36 fixed-address reservations has a descriptor named after its node,
+and the 13 regions UEFI lays out for itself -- `FD Reserved`, `UEFI FD`, `UEFI
+FD Reserved`, `Info Blk`, `MMU PageTables`, `Log Buffer`, `UEFI Stack`, `SEC
+Heap`, `Sched Heap`, `FV Region`, `UEFI RESV`, `Kernel`, `DXE Heap` -- stay
+where nx729jPkg puts them. Those fit this board's free band exactly apart from
+two gaps the map does not claim: 80 MiB at `0xa1f80000` and 1 MiB at
+`0xd7cc0000`. Neither is reserved by the device tree either, so leaving them out
+of the map costs capacity rather than safety.
 
-| Region | nx729j's map | NX769J measured | |
+Where the two boards differ:
+
+| Region | nx729j's map | NX769J | |
 | --- | --- | --- | --- |
 | DRAM base | `0x80000000` | `0x80000000` | agrees — `PcdSystemMemoryBase` |
 | Firmware volume | `0xA7100000` / `0x300000` | same | agrees — `uefi_fd.base` / `.size` |
 | UEFI stack | `0xA760D000` / `0x40000` | same | agrees — `PcdCPUCoresStackBase` |
 | `HYP` | `0x80000000` / `0x00A00000` | `0x80000000` / `0x00E00000` | **differs** — `gunyah_hyp_region` |
 | Contiguous splash | `0xB8000000` / `0x2B00000` | `0xE3940000` / `0x2B00000` | **differs** — `splash_region`, `cont_splash_region` |
-| `gpu_microcode_region` | absent | `0x9B09A000` / `0x2000` | **absent from the map** |
-| `disp_rdump_region` | absent | `0xE3940000` / `0x800000` | **absent from the map** — a display ramdump window inside the splash region, from the public firmware dump |
-| `ramoops` | absent | `0xD7E00000` / `0x200000` | **overlaps `TZApps Reserved`** at `0xD8800000` |
-| XBL DT, AOP, SMEM, HW Fence, … | present | present | agree — all 49 reservations are now known |
+| `DXE Heap` | `0xBAB00000` | `0xB8000000` / `0x1FCC0000` | **differs** — nx729j's splash address is ordinary RAM here |
+| `gpu_microcode_region` | absent | `0x9B09A000` / `0x2000` | now reserved |
+| `ramoops` | absent | `0xD7E00000` / `0x200000` | now reserved, and no longer under `TZApps` |
 
 The reservation list is complete. It comes from `vendor_boot.img` in the device's
 flash package, whose `dtb` field holds six device trees; four are Pineapple
@@ -245,19 +277,21 @@ variants with byte-identical reservation sets. `scripts/extract-firmware-dtb.py`
 prints them and the full table is in
 [`device-inputs.md`](../device-inputs.md#fw-dtb).
 
-What remains is the mapping. nx729j's table is a hand-built hybrid: the device
-tree's fine-grained reservations grouped into coarser descriptors, plus UEFI's
-own regions (`FD Reserved`, `UEFI Stack`, `SEC Heap`, `Sched Heap`, `FV Region`,
-`DXE Heap`) that the device tree knows nothing about. Rebuild it from the
-reservation list rather than editing it piecemeal — moving `Display Reserved`
-alone would leave `0xB8000000..0xBAB00000` unaccounted, and the device tree
-reserves nothing there.
+The mapping is checked rather than reviewed:
 
-**Do not boot the firmware until the map is rebuilt**: a map that reserves the
-wrong ranges lets the firmware write over what the bootloader or TrustZone owns.
+```sh
+python3 scripts/check-memory-map.py --dtb Resources/DTBs/nx769j.dtb -v
+# check-memory-map: 64 descriptors, 37 fixed reservations, 37 covering one, 0 unexplained
+```
+
+37 rather than 36 because `board.toml [[bootimg.dtb_node]]` adds the contiguous
+splash region to the boot image's device tree, and the script reads that table
+too. `scripts/test_check_memory_map.py` covers the four ways the map can be
+wrong: an uncovered reservation, two entries fighting over one range, an entry
+covering nothing, and an entry reaching outside DRAM.
 
 `Library/ConfigurationMapLib/ConfigurationMapLib.c` is the SoC configuration map
-and is shared with every Lanai board; it should follow `nx729jPkg`'s.
+and is shared with every Lanai board; it follows `nx729jPkg`'s.
 
 The splash reservation is the one that bites: it is inside the DRAM window this
 port hands to XNU (`[payload] dram_size = 0x80000000`), so the firmware map and
@@ -288,6 +322,27 @@ bytes at `Build/nx769jPkg/{target}_CLANGPDB/FV/SILICIUM_UEFI.fd`.
 `SOURCE_DATE_EPOCH` is pinned to the Mu-Silicium commit time, so the same
 sources give the same firmware.
 
+The command has been run to completion on this package:
+
+```text
+== firmware: uefi-nx769j
+== firmware: initializing submodules of the Mu-Silicium checkout
++ python3 …/check-nx769j-firmware.py
++ git -C …/mu_basecore-8f10084c apply …/Resources/MuPatches/Gic-Spurious.patch
++ build -p Platforms/ZTE/nx769jPkg/nx769j.dsc -a AARCH64 -b DEBUG -t CLANGPDB
+         -n 16 -D FD_BASE=0xa7100000 -D FD_SIZE=0x300000 -D FD_BLOCKS=768 …
+== firmware: …/Build/nx769jPkg/DEBUG_CLANGPDB/FV/SILICIUM_UEFI.fd
+```
+
+| Output | Value |
+| --- | --- |
+| FD | `Build/nx769jPkg/DEBUG_CLANGPDB/FV/SILICIUM_UEFI.fd` |
+| Size | 3145728 bytes = `0x300000`, exactly `[uefi_fd] size` |
+| SHA-256 | `93c8eece14da9189536ee7880b5bf268a2b2987b68aedbebc64526bb7ce3ab4d` |
+
+That is the firmware volume inside `boot.img`, and `boot.json` records the same
+`fd_sha256`, so what was packed is what was built.
+
 ## Verification
 
 | Check | Method |
@@ -302,19 +357,16 @@ sources give the same firmware.
 ## Open items
 
 Everything below is unresolved and stated as such rather than filled with a
-plausible value.
+plausible value. What has been closed — the memory map, the firmware DTB and the
+vendor DXE drivers — is described above with the command that closed it.
 
 | Item | Status | How to close it |
 | --- | --- | --- |
 | `SOC_TYPE` | Set to `2` (SM8650-AB, 3.30 GHz, 8 cores). The RedMagic 9 Pro is the 3.30 GHz bin and this board reports 8 CPUs (2×A520 + 5×A720 + 1×X4), so it is not a 6-core Q variant. | Read the prime core's max frequency from the device; `SOC_TYPE` `2` vs `4` distinguishes 3.30 from 3.40 GHz. |
 | `PcdCPUCoresStackBase` | Inherited from `nx729jPkg`, and `MemoryMapLib` puts `UEFI Stack` at the same address. | Check it against the Lanai memory map and the splash reservation before the first boot. |
-| **`MemoryMapLib`** | **Derived from `nx729jPkg`'s and not this board's.** Three conflicts are known — `HYP` size, `Display Reserved` address, and `TZApps Reserved` overlapping this board's `ramoops`. The data to rebuild it from is now complete. | Rebuild the table from the 49 reservations in [`device-inputs.md`](../device-inputs.md#fw-dtb), grouping them and adding UEFI's own regions. **Do not boot the firmware until this is done** — a wrong map lets it write over what the bootloader or TrustZone owns. |
-| Firmware DTB | **Collected.** `vendor_boot.img` in the device's flash package carries six trees; the board matches the v2 pair by `qcom,msm-id`. | `scripts/extract-firmware-dtb.py --vendor-boot … --tree 2 -o Resources/DTBs/nx769j.dtb`. All four Pineapple trees have identical reservations, so the map does not depend on the choice. |
-| Vendor DXE drivers | **All 20 recoverable.** `scripts/extract-uefi-drivers.py` pulls them out of `uefi.img`; nine carry a UI name different from the INF name and the script maps them. Not yet laid out under `Binaries/`. | Extract with `--out`, then give each module its EDK II INF wrapper per `Include/DXE.inc` and record the hashes in `proprietary-files.txt`. They cannot be redistributed, so every build machine runs the extraction. |
-| UniXNU/DarwinBoot modules | **Added** to the DSC `[Components]`, the FDF volume, and the two library mappings. `./unixnu build package` builds `UniXNU.efi`, `UniXNUDxe.efi` and `UniXNURamDiskDxe.efi` on Linux with CLANGPDB, which is what proves those integration points resolve. | — |
-| `PLATFORM_GUID` | Chosen: `F57D1EE0-603C-4EE3-AF74-1C995CE51AF3`, distinct from `nx729jPkg`'s. | — |
+| Silicium-ACPI tables | The SoC tables are Kailua's, which is SM8550: `APIC`, `GTDT` and `PPTT` describe Kailua's cores where this board has two A520, five A720 and one X4. Silicium-ACPI has no Lanai set. XNU reads the Apple device tree rather than ACPI, so this does not affect the XNU boot. | Build a Lanai table set, or drop the tables from the DSC if XNU is the only target. |
 | `early_security_init` | Unset. `extract-ipsw-pins.py` used to emit AMFI's kmod stub address, which is not what the hook calls. | Reversing task; see the packaging area of [`porting.toml`](../porting.toml). |
-| Boot on hardware | Not attempted. | Follow [bring-up](https://unixnu.com/porting/bring-up) and [`docs/FLASHING.md`](FLASHING.md). |
+| Boot on hardware | Not attempted. The firmware volume is built and its map is checked, but nothing here has been observed running. | Follow [bring-up](https://unixnu.com/porting/bring-up) and [`docs/FLASHING.md`](FLASHING.md). |
 
 ## Related
 
