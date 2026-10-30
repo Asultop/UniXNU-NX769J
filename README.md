@@ -55,9 +55,9 @@ build on Linux with CLANGPDB.
 | Image | Bytes | What it is |
 | --- | --- | --- |
 | `SILICIUM_UEFI.fd` | 3145728 | the UEFI firmware volume, in the `uefi-nx769j` checkout |
-| `payload/payload.img` | 218103808 | the FAT payload: menu config, kernel, ADT, trust cache |
+| `payload/payload.img` | 218103808 | the FAT payload: menu config, kernel, ADT, trust cache, Data seed |
 | `userdata/userdata-root.img` | 8357150720 | the OS and SystemOS windows |
-| `boot/boot.img` | 220332032 | BootShim + FD + payload + firmware DTB, for `fastboot boot` |
+| `boot/boot.img` | 220344320 | BootShim + FD + payload + firmware DTB, for `fastboot boot` |
 
 ### What the build needs that no repository can hold
 

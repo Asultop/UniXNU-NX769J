@@ -83,17 +83,23 @@ header is the same every time.
 
 ```sh
 ./unixnu build payload -D ../UniXNU-NX769J --unique-chip-id 8abc5430 \
-  --uefi ../uefi-nx769j --ipsw <restore.ipsw> --trust-cache <096-04088-077.dmg.trustcache>
+  --uefi ../uefi-nx769j --ipsw <restore.ipsw> --trust-cache <096-04088-077.dmg.trustcache> \
+  --data-ramdisk <nx769j-data.dbr>
 ```
+
+`--unique-chip-id`, `--trust-cache` and `--data-ramdisk` are all command-line
+inputs and none of them is in the configuration, which is why the payload hash
+changes even when the sources do not.
 
 | Result | Value |
 | --- | --- |
 | Output | `out/nx769j/ios-16.5-20F66/nx769j/payload/payload.img` |
 | Size | 218103808 bytes (208 MiB) |
-| SHA-256 | `a01c88e13681ff83ba3059c9bf0da00a4cdcceac041af24e28898d753ae1e6f9` |
+| SHA-256 | `8f5d75ffda6cf8b25ddb2847a461c70c615b58fc10ad8cdae957f46851d9f497` |
+| Data seed | `scratch-data.img` 970848 bytes, sha256 `e13f93e046ad2d60e8d3be706577be2d207df0c303b52682a2b54b6ad18da2bc` |
 | Prelinked kernel | `kernel.macho` sha256 `2458882f89378ac7ead0cfd422d3201e088acdf2a1b4520ba199ff7cbe1819ef` |
 | Trust cache | `df0f60fd05b7c312ad0fddb5c85d8adf97b487e8500518337bc4cbde3ca73ea7`, one of the two the profile pins |
-| Menu | `EFI/UniXNU/unixnu.toml` lists `xnu`, `reset`, `shutdown` and `tools` |
+| Menu | `EFI/UniXNU/unixnu.toml` lists `xnu` with `initrd = "Payloads/scratch-data.img"`, then `reset`, `shutdown` and `tools` |
 
 ## Boot image
 
@@ -107,7 +113,7 @@ header is the same every time.
 | --- | --- |
 | Output | `out/nx769j/ios-16.5-20F66/nx769j/boot/boot.img` |
 | Size | 220344320 bytes |
-| SHA-256 | `1b1f22c2513e16ec50463345daa45b2cf8244881d0841b174cdc4b1d6ea38a4a` |
+| SHA-256 | `834403f3ba08c1e6da5a68eb738a97ac3a74478f60eec36e3a4bc67dd86a6a44` |
 | Header | `ANDROID!`, `header_version` 0, `pagesize` 4096, kernel at `0x8000`, tags at `0x1e00000` |
 | Packed FD | `fd_sha256` `b06906387e20df18f2eef45267ccc11160af4b3ed8e30887a4b1c6d4df7a4fbc`, the firmware volume above |
 | Packed DTB | `dtb_sha256` `f336a7d70c72b8d4ac9c02c843b58bb49111903da154b012f8ff3c26dc7d38c7` |
@@ -147,7 +153,7 @@ Built on a hosted macOS runner, because every step needs `hdiutil`:
 | Result | Value |
 | --- | --- |
 | Workflow run | [41026291337](https://github.com/Asultop/UniXNU-NX769J/actions/runs/41026291337) |
-| Device revision | `ed45ee8` |
+| Device revision | `ed45ee86452bc50735625fcf124fa2911d364ef9` |
 | Artifact | `nx769j-data-seed`, 567485 bytes |
 | Artifact sha256 | `589fb90de70a9d5b5e367464a66674c659c7bd32ee93ced445ead9f2f77136bd` |
 | Data volume UUID | `DA9A01BC-22A9-47B0-8EA0-27B3C35E37E4` |
@@ -161,8 +167,28 @@ take it from this table, not from a previous run.
 Two things about the artifact are worth knowing. It is uploaded **unencrypted**,
 because the `ARTIFACT_PASSPHRASE` secret is not set and the workflow refuses to
 invent one; it holds files taken from the iOS restore image. And downloading an
-artifact needs a token even for a public repository, so it is fetched with
-`gh run download` or `curl` with a `GITHUB_TOKEN` rather than anonymously.
+artifact needs a token even for a public repository. `gh` does it:
+
+```sh
+gh run download 41026291337 -R Asultop/UniXNU-NX769J -n nx769j-data-seed -D out/seed
+```
+
+That produced `nx769j-data.dbr`, 970848 bytes, sha256
+`e13f93e046ad2d60e8d3be706577be2d207df0c303b52682a2b54b6ad18da2bc`, matching the
+report the run wrote. It holds 36 files and 589907 bytes of the iOS 16.5 OS
+volume's initial `/private/var`, in a 256 MiB container. The seed's own
+provenance is `os_launchd_sha256`
+`4c61512d19b9a55a6ddad27e23b88fc5008fbf77d0c0b5e6bdd7c7d90cef3e06`, which is the
+launchd of the iOS 16.5 OS image and not the iPadOS one UniXNU's fixture pins.
+
+### Published
+
+`gh repo edit Asultop/UniXNU-NX769J --add-topic unixnu` added the topic the
+[device list](https://unixnu.com/devices/) searches on. The catalog workflow
+that generates the device page runs twice a day on its own and cannot be
+dispatched from here: `gh workflow run sync-devices.yml --repo UniXNU/UniXNU`
+returns 403, which is a different repository's admin boundary rather than a
+configuration problem.
 
 ### How the run got there
 

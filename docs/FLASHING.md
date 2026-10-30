@@ -20,10 +20,10 @@ writes nothing; the step that does write is called out explicitly below.
 | `payload.text_fixups` | **empty** | an honest empty list; add one only when a boot fails on one |
 | `payload.adt.unique_chip_id` | **required on the command line** | the SoC serial, recorded in [`device-inputs.md`](../device-inputs.md#chip-id) |
 
-The two remaining inputs are the platform seed and the trust cache, both passed
-at build time rather than stored in the configuration: `--unique-chip-id` is
-per-device, and the restore image is not redistributable so `--ipsw` and
-`--trust-cache` take a local path.
+Three inputs are passed at build time rather than stored in the configuration:
+`--unique-chip-id` is per-device, `--data-ramdisk` is the Data seed a macOS
+runner builds and a new one is formatted on every run, and the restore image is
+not redistributable so `--ipsw` and `--trust-cache` take a local path.
 
 ## 1. Build the parts
 
@@ -37,11 +37,16 @@ From the UniXNU checkout, in order, checking each output before continuing:
 ./unixnu build firmware -D ../UniXNU-NX769J --uefi ../uefi-nx769j
 ./unixnu build userdata -D ../UniXNU-NX769J --ipsw <restore.ipsw>
 ./unixnu build payload  -D ../UniXNU-NX769J --uefi ../uefi-nx769j --ipsw <restore.ipsw> \
-  --unique-chip-id 8abc5430 --trust-cache <096-04088-077.dmg.trustcache>
+  --unique-chip-id 8abc5430 --trust-cache <096-04088-077.dmg.trustcache> \
+  --data-ramdisk <nx769j-data.dbr>
 ./unixnu bootimg -D ../UniXNU-NX769J --uefi ../uefi-nx769j \
   --dtb ../uefi-nx769j/Resources/DTBs/nx769j.dtb \
   -o out/nx769j/ios-16.5-20F66/nx769j/boot/boot.img
 ```
+
+The Data seed comes from `.github/workflows/data-seed.yml` on a macOS runner;
+fetch it with `gh run download <run> -n nx769j-data-seed` and pass it as
+`--data-ramdisk`. Without it there is no writable Data volume.
 
 `build userdata` comes before `build payload` here because
 `scripts/extract-root-volume-uuid.py` reads the root volume UUID out of the
@@ -62,8 +67,8 @@ Outputs land under `out/nx769j/ios-16.5-20F66/nx769j/`. This repository's
 | --- | --- | --- |
 | `firmware` step's `SILICIUM_UEFI.fd` | 3145728 | the UEFI firmware volume, in the Mu-Silicium checkout |
 | `userdata/userdata-root.img` | 8357150720 | the OS and SystemOS windows, ready for `fastboot flash userdata` |
-| `payload/payload.img` | 218103808 | the FAT payload: menu config, kernel, ADT, trust cache |
-| `boot/boot.img` | 220332032 | the whole thing, what `fastboot boot` takes |
+| `payload/payload.img` | 218103808 | the FAT payload: menu config, kernel, ADT, trust cache, Data seed |
+| `boot/boot.img` | 220344320 | the whole thing, what `fastboot boot` takes |
 
 ## 2. Pack the boot image
 
