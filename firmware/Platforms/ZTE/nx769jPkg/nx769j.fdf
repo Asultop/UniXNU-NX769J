@@ -80,6 +80,10 @@ READ_LOCK_STATUS   = TRUE
   INF UniXNUPkg/Driver/UniXNURamDiskDxe/UniXNURamDiskDxe.inf
   INF DarwinBootPkg/Driver/DarwinBoot.inf
 
+  # The firmware log exporter. Embedded like the boot chain, because it is what
+  # captures the firmware log before the kernel handoff.
+  INF UniXNUPkg/Driver/AdvancedLogDxe/AdvancedLogDxe.inf
+
   # RAM Manager
   INF SiliciumPkg/Drivers/RamManagerDxe/RamManagerDxe.inf
 

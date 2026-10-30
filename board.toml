@@ -230,6 +230,9 @@ title = "UniXNU"
 # Handoff window passed to the ADT tool, not the installed DRAM size.
 dram_size = "0x80000000"
 panic_screen = true
+# Adds a Tools entry to the generated boot menu, which is where AdvancedLogDxe
+# publishes the firmware log as QR codes. See docs/UEFI-FIRMWARE.md.
+tools = true
 timeout = 3
 kernel_args = ["-v", "serial=3"]
 

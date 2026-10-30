@@ -98,6 +98,12 @@
   #
   gQcomPkgTokenSpaceGuid.PcdPlatformType|"LA"
 
+  #
+  # The AdvancedLogDxe exporter names its log pages after this, so it is the
+  # board's ASCII name rather than UniXNUPkg's default.
+  #
+  gUniXNUPkgTokenSpaceGuid.PcdUniXNUDeviceModel|"nx769j"
+
 [LibraryClasses]
   #
   # Memory Libraries
@@ -122,6 +128,14 @@
   #
   UniXNULib|UniXNUPkg/Library/UniXNULib/UniXNULib.inf
 
+  #
+  # AdvancedLogDxe pages the Advanced Logger buffer out as QR codes and needs
+  # both of these. They live in Common/Mu, which board.toml [firmware].packages
+  # already puts on PACKAGES_PATH.
+  #
+  AdvancedLoggerAccessLib|AdvLoggerPkg/Library/AdvancedLoggerAccessLib/AdvancedLoggerAccessLib.inf
+  QrEncoderLib|MsGraphicsPkg/Library/QrEncoderLib/QrEncoderLib.inf
+
 [Components]
   #
   # ACPI Tables
@@ -140,3 +154,13 @@
   UniXNUPkg/Driver/UniXNUDxe/UniXNUDxe.inf
   UniXNUPkg/Driver/UniXNURamDiskDxe/UniXNURamDiskDxe.inf
   DarwinBootPkg/Driver/DarwinBoot.inf
+
+  #
+  # The firmware log exporter from
+  # https://unixnu.com/porting/log-capture#firmware-setup. It reads the
+  # Advanced Logger buffer and pages it out as QR codes under Tools, which is
+  # how the first boot's firmware log is captured before the kernel handoff.
+  # Its Depex is gAdvancedLoggerProtocolGuid, so it loads only when the
+  # platform's Advanced Logger is configured; the menu entry appears then.
+  #
+  UniXNUPkg/Driver/AdvancedLogDxe/AdvancedLogDxe.inf
