@@ -54,7 +54,14 @@ SKIP_DIRS = ('staged_system_apps',)
 
 
 def fail(message: str) -> None:
+    # The workflow runner turns this into a run annotation, which is the one
+    # part of a failed run that is readable without repository access.
+    print(f'::error title=build-data-seed::{message}', flush=True)
     raise SystemExit('build-data-seed: ' + message)
+
+
+def step(message: str) -> None:
+    print(f'build-data-seed: {message}', flush=True)
 
 
 def run(*args: str) -> str:
@@ -162,13 +169,13 @@ def main() -> int:
     source = args.os_mount.resolve()
     if not source.is_dir():
         fail(f'{source} is not a directory')
+    step(f'checking {source} is an iOS OS volume')
     launchd_hash = check_mount(source)
 
     tree = source / 'private/var'
     needed = tree_bytes(tree)
     budget = args.size_mib * MIB
-    print(f'build-data-seed: private/var holds {needed} bytes to copy, '
-          f'the container is {budget} bytes')
+    step(f'private/var holds {needed} bytes to copy; the container is {budget} bytes')
     if needed > budget * FILL_LIMIT:
         fail(f'private/var is {needed} bytes and --size-mib {args.size_mib} gives {budget} '
              f'before APFS metadata; raise --size-mib')
@@ -182,6 +189,7 @@ def main() -> int:
         fail(f'{image} exists; clear the scratch directory first')
     packer = packed_ramdisk(args.unixnu.resolve() if args.unixnu else None)
 
+    step(f'creating a {args.size_mib} MiB APFS OwnerData volume at {image}')
     run('hdiutil', 'create', '-size', f'{args.size_mib}m', '-layout', 'NONE', '-fs', 'APFS',
         '-volname', 'OwnerData', '-type', 'UDTO', str(image))
     if not image.is_file():
@@ -199,6 +207,7 @@ def main() -> int:
         info = plistlib.loads(subprocess.check_output(
             ['diskutil', 'info', '-plist', volumes[0]['dev-entry']]))
         volume_uuid = info['VolumeUUID']
+        step('copying private/var into the seed')
         count, total = copy_var(source / 'private/var', mount)
         for name in EMPTY_DIRS:
             (mount / name).mkdir(parents=True, exist_ok=True)
@@ -207,6 +216,7 @@ def main() -> int:
         subprocess.run(['hdiutil', 'detach', device], check=True)
 
     container_bytes = verify_container(image, args.size_mib)
+    step('packing the seed')
     metadata = packer.pack(image, args.output)
 
     report = {
@@ -234,4 +244,10 @@ def main() -> int:
 
 
 if __name__ == '__main__':
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except SystemExit:
+        raise
+    except Exception as error:  # noqa: BLE001 - the annotation is the point
+        print(f'::error title=build-data-seed::{type(error).__name__}: {error}', flush=True)
+        raise
