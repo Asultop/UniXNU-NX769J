@@ -148,12 +148,23 @@ jobs:
         run: |
           set -euo pipefail
           trap 'echo "::error title=Build the seed::$BASH_COMMAND"' ERR
+          # Run it out of the pipeline and echo the last line as an annotation on
+          # failure: a traceback on stderr is not an annotation, and this is the
+          # only part of a failed run readable without repository access.
+          set +e
           python3 device/scripts/build-data-seed.py \
             --os-mount "$RUNNER_TEMP/os-mount" \
             --output "$RUNNER_TEMP/out/nx769j-data.dbr" \
             --size-mib "$SIZE_MIB" \
             --unixnu unixnu \
-            --work "$RUNNER_TEMP/seed-work" | tee "$RUNNER_TEMP/out/build-data-seed.log"
+            --work "$RUNNER_TEMP/seed-work" > "$RUNNER_TEMP/out/build-data-seed.log" 2>&1
+          status=$?
+          set -e
+          cat "$RUNNER_TEMP/out/build-data-seed.log"
+          if [ "$status" -ne 0 ]; then
+            echo "::error title=build-data-seed::$(tail -n 1 "$RUNNER_TEMP/out/build-data-seed.log")"
+            exit "$status"
+          fi
           uuid=$(python3 -c "import json,os;print(json.load(open(os.environ['RUNNER_TEMP']+'/out/nx769j-data.dbr.json'))['volume_uuid'])")
           {
             echo "device $(git -C device rev-parse HEAD)"
