@@ -79,6 +79,14 @@ jobs:
           path: unixnu
           persist-credentials: false
 
+      # Only DarwinBoot is needed, and it is a submodule rather than part of the
+      # tree. Its Test/packed_ramdisk.py is the DBRDISK1 writer the seed packs
+      # with; the rest of the submodules are not worth fetching.
+      - name: Fetch the DarwinBoot submodule
+        run: |
+          set -euo pipefail
+          git -C unixnu submodule update --init --depth 1 drivers/DarwinBoot
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"

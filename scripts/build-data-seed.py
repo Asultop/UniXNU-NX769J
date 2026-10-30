@@ -10,9 +10,8 @@ whose `sbin/launchd` does not hash to that image's, and the second grows a
 packed seed this port does not have. This does the whole thing for iOS 16.5 and
 prints what it made.
 
-Every step needs macOS: `hdiutil` formats and attaches the container and
-`diskutil apfs resizeContainer` grows it. Run it there, or let
-`.github/workflows/data-seed.yml` run it on a hosted macOS runner.
+Every step needs macOS: `hdiutil` formats and attaches the container. Run it
+there, or let `.github/workflows/data-seed.yml` run it on a hosted macOS runner.
 
   1. an APFS volume named OwnerData at the size asked for, holding the OS
      volume's `private/var` without `staged_system_apps`, plus the empty
@@ -69,16 +68,26 @@ def run(*args: str) -> str:
 
 
 def packed_ramdisk(unixnu: Path | None):
-    """DarwinBoot's DBRDISK1 writer, imported from the UniXNU checkout."""
-    for root in (unixnu, Path('../UniXNU'), Path.home() / 'build/UniXNU'):
+    """DarwinBoot's DBRDISK1 writer.
+
+    It lives in the DarwinBoot component, which is a submodule of UniXNU rather
+    than part of it, so either the UniXNU checkout or the component on its own
+    is accepted -- `git submodule update --init drivers/DarwinBoot` is enough,
+    and cloning every other submodule for one file is not.
+    """
+    candidates = []
+    for root in (unixnu, Path('../UniXNU'), Path('../DarwinBoot'),
+                 Path.home() / 'build/UniXNU'):
         if root is None:
             continue
-        module = root / 'drivers/DarwinBoot/Test'
+        candidates += [root / 'drivers/DarwinBoot/Test', root / 'Test', root]
+    for module in candidates:
         if (module / 'packed_ramdisk.py').is_file():
             sys.path.insert(0, str(module))
             import packed_ramdisk
             return packed_ramdisk
-    fail('packed_ramdisk.py not found; give --unixnu DIR pointing at a UniXNU checkout')
+    fail('packed_ramdisk.py not found. Point --unixnu at a UniXNU checkout whose '
+         'drivers/DarwinBoot submodule is initialised, or at the DarwinBoot repo itself')
 
 
 def check_mount(source: Path) -> int:
