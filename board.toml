@@ -208,7 +208,13 @@ BUILDID_STRING = "nx769j-research"
 [bootimg.image]
 base = 0x0
 pagesize = 4096
-header_version = 0
+header_version = 4
+# The Android 14 ABL is a version 4 boot chain, and a 0.0.0 os_version/os_patch_level
+# is rejected: bootimg.py verify() reads the v0 layout and a v4 image fails its own
+# self-check, so the values that were carried were never the ones packed.
+os_version = "16.0.0"
+os_patch_level = "2026-08"
+kernel_compression = "gzip"
 
 # The stock bootloader keeps the contiguous-splash region and expects it in the
 # boot image's device tree. Measured on the device from
