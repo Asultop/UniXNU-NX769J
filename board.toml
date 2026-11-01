@@ -240,7 +240,10 @@ panic_screen = true
 # publishes the firmware log as QR codes. See docs/UEFI-FIRMWARE.md.
 tools = true
 timeout = 3
-kernel_args = ["-v", "serial=3"]
+# serial=3 selects the Apple SoC UART, which this board does not expose: the kernel
+# spins in serial init and never reaches the MMU. Verbose stays on so the panic
+# screen and the entry-probe bars still report progress.
+kernel_args = ["-v"]
 
 [payload.adt]
 chip_id = "207"
