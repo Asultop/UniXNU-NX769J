@@ -230,7 +230,7 @@ props = [
 
 [payload]
 volume = "NX769JESP"
-size_mib = 208
+size_mib = 64
 loader = "firmware"
 title = "UniXNU"
 # Handoff window passed to the ADT tool, not the installed DRAM size.
